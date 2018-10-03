@@ -5,6 +5,16 @@ import errno
 from tqdm import tqdm
 
 
+def gen_bar_updater(pbar):
+    def bar_update(count, block_size, total_size):
+        if pbar.total is None and total_size:
+            pbar.total = total_size
+        progress_bytes = count * block_size
+        pbar.update(progress_bytes - pbar.n)
+
+    return bar_update
+
+
 def check_integrity(fpath, md5=None):
     if md5 is None:
         return True
@@ -19,6 +29,19 @@ def check_integrity(fpath, md5=None):
     if md5c != md5:
         return False
     return True
+
+
+def makedir_exist_ok(dirpath):
+    """
+    Python2 support for os.makedirs(.., exist_ok=True)
+    """
+    try:
+        os.makedirs(dirpath)
+    except OSError as e:
+        if e.errno == errno.EEXIST:
+            pass
+        else:
+            raise
 
 
 def download_url(url, root, filename, md5):
@@ -48,3 +71,4 @@ def download_url(url, root, filename, md5):
                     url, fpath,
                     reporthook=gen_bar_updater(tqdm(unit='B', unit_scale=True))
                 )
+

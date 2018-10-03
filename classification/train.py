@@ -1,5 +1,5 @@
 from resnet import model
-from data import CIFAR10
+from cifar_data import CIFAR10
 
 import torch
 import torch.nn as nn
@@ -33,16 +33,16 @@ transforms_test = transforms.Compose([
 dataset_train = CIFAR10(root='./data', train=True, download=True, transform=transforms_train)
 dataset_test = CIFAR10(root='./data', train=False, download=True, transform=transforms_test)
 train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, 
-	                                       shuffle=True, num_workers=args.num_workers)
+	                      shuffle=True, num_workers=args.num_workers)
 test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=100, 
-	                                      shuffle=True, num_workers=args.num_workers)
+	                     shuffle=True, num_workers=args.num_workers)
 
 # there are 10 classes so the dataset name is cifar-10
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 
 	       'dog', 'frog', 'horse', 'ship', 'truck')
 
 print('==> Making model..')
-net = ResNet18()
+net = model.resnet18()
 net = net.to(device)
 if device == 'cuda':
 	net = cuda.nn.DataParallel(net)
