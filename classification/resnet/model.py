@@ -91,5 +91,5 @@ class ResNet(nn.Module):
 
 
 def resnet18(**kwargs):
-	model = ResNet(BasicBlock, [3, 3, 3], **kwargs) 
+	model = ResNet(BasicBlock, [9, 9, 9], **kwargs) 
 	return model

@@ -1,6 +1,5 @@
 import os
 from resnet import model
-from cifar_data import CIFAR10
 
 import torch
 import torch.nn as nn
@@ -15,7 +14,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.1, help='')
-parser.add_argument('--resume', default=False, help='')
+parser.add_argument('--resume', default='ckpt.pth', help='')
 parser.add_argument('--batch_size', default=128, help='')
 parser.add_argument('--num_worker', default=4, help='')
 args = parser.parse_args()
@@ -39,7 +38,7 @@ dataset_test = torchvision.datasets.CIFAR10(root='./data', train=False, download
 train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, 
 	                      shuffle=True, num_workers=args.num_worker)
 test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=100, 
-	                     shuffle=True, num_workers=args.num_worker)
+	                     shuffle=False, num_workers=args.num_worker)
 
 # there are 10 classes so the dataset name is cifar-10
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 
@@ -52,6 +51,9 @@ if device == 'cuda':
 	net = torch.nn.DataParallel(net)
 	cudnn.benchmark = True
 
+if args.resume is not None:
+	checkpoint = torch.load('./save_model/' + args.resume)
+	net.load_state_dict(checkpoint['net'])
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.1, 
@@ -127,6 +129,10 @@ def test(epoch, best_acc):
 
 if __name__=='__main__':
 	best_acc = 0
-	for epoch in range(200):
-		train(epoch)
-		best_acc = test(epoch, best_acc)
+	if args.resume is None:
+		for epoch in range(200):
+			train(epoch)
+			best_acc = test(epoch, best_acc)
+
+	else:
+		test(epoch=0, best_acc=0)
