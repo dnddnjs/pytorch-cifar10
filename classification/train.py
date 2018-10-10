@@ -4,6 +4,7 @@ from cifar_data import CIFAR10
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim import lr_scheduler
 import torchvision
 import torchvision.transforms as transforms
 
@@ -13,7 +14,7 @@ parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.1, help='')
 parser.add_argument('--resume', default=False, help='')
 parser.add_argument('--batch_size', default=128, help='')
-parser.add_argument('--num_worker', default=2, help='')
+parser.add_argument('--num_worker', default=4, help='')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -33,9 +34,9 @@ transforms_test = transforms.Compose([
 dataset_train = CIFAR10(root='./data', train=True, download=True, transform=transforms_train)
 dataset_test = CIFAR10(root='./data', train=False, download=True, transform=transforms_test)
 train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, 
-	                      shuffle=True, num_workers=args.num_workers)
+	                      shuffle=True, num_workers=args.num_worker)
 test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=100, 
-	                     shuffle=True, num_workers=args.num_workers)
+	                     shuffle=True, num_workers=args.num_worker)
 
 # there are 10 classes so the dataset name is cifar-10
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 
@@ -50,7 +51,10 @@ if device == 'cuda':
 
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+optimizer = optim.SGD(net.parameters(), lr=0.1, 
+	                  momentum=0.9, weight_decay=1e-4)
+step_lr_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[32000, 48000], gamma=0.1)
+
 
 def train(epoch):
 	net.train()
@@ -60,6 +64,7 @@ def train(epoch):
 	total = 0
 
 	for batch_idx, (inputs, targets) in enumerate(train_loader):
+		step_lr_scheduler.step()
 		inputs = inputs.to(device)
 		targets = targets.to(device)
 		outputs = net(inputs)
@@ -70,16 +75,15 @@ def train(epoch):
 		optimizer.step()
 
 		train_loss += loss.item()
-		_, predicted = output.max(1)
+		_, predicted = outputs.max(1)
 		total += targets.size(0)
 		correct += predicted.eq(targets).sum().item()
-
-		progress_bar(batch_idx, len(train_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-		    % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
-
+		print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
 
 
-def test(epoch):
+
+def test(epoch, best_acc):
 	net.eval()
 
 	test_loss = 0
@@ -87,21 +91,22 @@ def test(epoch):
 	total = 0
 
 	with torch.no_grad():
-		for batch_idx, (inputs, targets) in enumerate(train_loader):
+		for batch_idx, (inputs, targets) in enumerate(test_loader):
 			inputs = inputs.to(device)
 			targets = targets.to(device)
 			outputs = net(inputs)
 			loss = criterion(outputs, targets)
 
 			test_loss += loss.item()
-			_, predicted = output.max(1)
+			_, predicted = outputs.max(1)
 			total += targets.size(0)
 			correct += predicted.eq(targets).sum().item()
 
-			progress_bar(batch_idx, len(test_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-			    % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
+			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
 
 	acc = 100 * correct / total
+
 	if acc > best_acc:
 		print('==> Saving model..')
 		state = {
@@ -114,9 +119,11 @@ def test(epoch):
 		torch.save(state, './save_model/ckpt.pth')
 		best_acc = acc
 
+	return best_acc
+
 
 if __name__=='__main__':
 	best_acc = 0
 	for epoch in range(200):
 		train(epoch)
-		test(epoch)
+		best_acc = test(epoch, best_acc)
