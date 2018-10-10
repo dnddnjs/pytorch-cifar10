@@ -1,3 +1,4 @@
+import os
 from resnet import model
 from cifar_data import CIFAR10
 
@@ -5,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
+import torch.backends.cudnn as cudnn
+
 import torchvision
 import torchvision.transforms as transforms
 
@@ -31,8 +34,8 @@ transforms_test = transforms.Compose([
 	transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-dataset_train = CIFAR10(root='./data', train=True, download=True, transform=transforms_train)
-dataset_test = CIFAR10(root='./data', train=False, download=True, transform=transforms_test)
+dataset_train = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transforms_train)
+dataset_test = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transforms_test)
 train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, 
 	                      shuffle=True, num_workers=args.num_worker)
 test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=100, 
@@ -46,7 +49,7 @@ print('==> Making model..')
 net = model.resnet18()
 net = net.to(device)
 if device == 'cuda':
-	net = cuda.nn.DataParallel(net)
+	net = torch.nn.DataParallel(net)
 	cudnn.benchmark = True
 
 
