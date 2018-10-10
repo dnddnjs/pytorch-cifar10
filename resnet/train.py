@@ -1,7 +1,4 @@
 import os
-
-from densenet import model
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,6 +8,7 @@ import torch.backends.cudnn as cudnn
 import torchvision
 import torchvision.transforms as transforms
 
+from model import resnet54
 import argparse
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
@@ -18,7 +16,6 @@ parser.add_argument('--lr', default=0.1, help='')
 parser.add_argument('--resume', default=None, help='')
 parser.add_argument('--batch_size', default=128, help='')
 parser.add_argument('--num_worker', default=4, help='')
-parser.add_argument('--model', default='densenet', help='')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -35,8 +32,8 @@ transforms_test = transforms.Compose([
 	transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-dataset_train = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transforms_train)
-dataset_test = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transforms_test)
+dataset_train = torchvision.datasets.CIFAR10(root='../data', train=True, download=True, transform=transforms_train)
+dataset_test = torchvision.datasets.CIFAR10(root='../data', train=False, download=True, transform=transforms_test)
 train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, 
 	                      shuffle=True, num_workers=args.num_worker)
 test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=100, 
@@ -47,13 +44,8 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 	       'dog', 'frog', 'horse', 'ship', 'truck')
 
 print('==> Making model..')
-if args.model == 'resnet':
-	from resnet import model
-	net = model.resnet54()
-elif args.model == 'densenet':
-	from densenet import model
-	net = model.densenet_cifar()
 
+net = resnet54()
 net = net.to(device)
 if device == 'cuda':
 	net = torch.nn.DataParallel(net)
