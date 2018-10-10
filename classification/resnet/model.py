@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 
-__all__ = ['ResNet', 'resnet18']
+__all__ = ['ResNet', 'resnet54']
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -90,6 +90,6 @@ class ResNet(nn.Module):
 		return x
 
 
-def resnet18(**kwargs):
+def resnet54(**kwargs):
 	model = ResNet(BasicBlock, [9, 9, 9], **kwargs) 
 	return model

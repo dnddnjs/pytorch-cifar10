@@ -1,5 +1,6 @@
 import os
-from resnet import model
+
+from densenet import model
 
 import torch
 import torch.nn as nn
@@ -14,9 +15,10 @@ import argparse
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.1, help='')
-parser.add_argument('--resume', default='ckpt.pth', help='')
+parser.add_argument('--resume', default=None, help='')
 parser.add_argument('--batch_size', default=128, help='')
 parser.add_argument('--num_worker', default=4, help='')
+parser.add_argument('--model', default='densenet', help='')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -45,7 +47,13 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 	       'dog', 'frog', 'horse', 'ship', 'truck')
 
 print('==> Making model..')
-net = model.resnet18()
+if args.model == 'resnet':
+	from resnet import model
+	net = model.resnet54()
+elif args.model == 'densenet':
+	from densenet import model
+	net = model.densenet_cifar()
+
 net = net.to(device)
 if device == 'cuda':
 	net = torch.nn.DataParallel(net)
