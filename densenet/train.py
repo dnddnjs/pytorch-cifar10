@@ -81,8 +81,9 @@ def train(epoch):
 		_, predicted = outputs.max(1)
 		total += targets.size(0)
 		correct += predicted.eq(targets).sum().item()
-		print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-			  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
+		if batch_idx % 10 == 0:
+			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+				  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
 
 
 
@@ -104,9 +105,10 @@ def test(epoch, best_acc):
 			_, predicted = outputs.max(1)
 			total += targets.size(0)
 			correct += predicted.eq(targets).sum().item()
-
-			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-			  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
+			
+			if batch_idx % 10 == 0:
+				print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+				  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
 
 	acc = 100 * correct / total
 
