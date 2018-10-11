@@ -28,7 +28,6 @@ class _DenseLayer(nn.Sequential):
         self.drop_rate = drop_rate
 
     def forward(self, x):
-        print(x.size())
         new_features = super(_DenseLayer, self).forward(x)
         if self.drop_rate > 0:
             new_features = F.dropout(new_features, p=self.drop_rate, training=self.training)
