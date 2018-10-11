@@ -1,23 +1,13 @@
-# pytorch-vision
-Several example codes for training deep neural network in PyTorch
+# pytorch-cifar10
+State of the art algorithm codes on CIFAR-10 dataset in PyTorch
 
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/16641054/46775076-8b17e480-cd40-11e8-9501-89c6fbca36bd.jpg" 
+width=550px>
+</p>
 
-## Classification
+## State of the art models
 
-- VGG-16
 - ResNet
-- MobileNet
-- SENet
-
-
-## Object Detection 
-
-- Yolo-v3
-- SSD
-- Mask R-CNN
-
-
-## Segmentation
-
-- UNet
-- ENet
+- DenseNet
+- Wide ResNet
