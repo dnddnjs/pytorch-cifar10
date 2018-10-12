@@ -5,14 +5,6 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 from collections import OrderedDict
 
-__all__ = ['DenseNet', 'densenet_cifar']
-
-
-def densenet_cifar(pretrained=False, **kwargs):
-    model = DenseNet(num_init_features=24, growth_rate=12, block_config=(16, 16, 16),
-                     **kwargs)
-    return model
-
 
 class _DenseLayer(nn.Sequential):
     def __init__(self, num_input_features, growth_rate, bn_size, drop_rate):
@@ -54,7 +46,7 @@ class _Transition(nn.Sequential):
 
 class DenseNet(nn.Module):
     def __init__(self, growth_rate=32, block_config=(6, 12, 24, 16),
-                 num_init_features=64, bn_size=4, drop_rate=0.2, num_classes=10):
+                 num_init_features=64, bn_size=4, drop_rate=0.0, num_classes=10):
 
         super(DenseNet, self).__init__()
 
@@ -97,3 +89,9 @@ class DenseNet(nn.Module):
         out = F.avg_pool2d(out, kernel_size=8, stride=1).view(features.size(0), -1)
         out = self.classifier(out)
         return out
+
+
+def densenet_cifar(**kwargs):
+    model = DenseNet(num_init_features=24, growth_rate=12, block_config=(16, 16, 16),
+                     **kwargs)
+    return model
