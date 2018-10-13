@@ -92,6 +92,6 @@ class DenseNet(nn.Module):
 
 
 def densenet_cifar(**kwargs):
-    model = DenseNet(num_init_features=80, growth_rate=40, block_config=(31, 31, 31),
+    model = DenseNet(num_init_features=48, growth_rate=24, block_config=(41, 41, 41),
                      **kwargs)
     return model
