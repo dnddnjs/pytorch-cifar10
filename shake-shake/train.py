@@ -61,8 +61,7 @@ optimizer = optim.SGD(net.parameters(), lr=args.lr,
 	                  momentum=0.9, weight_decay=1e-4)
 
 
-step_lr_scheduler = cosine_annealing_scheduler(optimizer, 
-	                args.epochs, len(train_loader), args.lr)
+cosine_lr_scheduler = cosine_annealing_scheduler(optimizer, args.epochs, args.lr)
 
 def train(epoch):
 	net.train()
@@ -71,7 +70,6 @@ def train(epoch):
 	total = 0
 
 	for batch_idx, (inputs, targets) in enumerate(train_loader):
-		step_lr_scheduler.step()
 		inputs = inputs.to(device)
 		targets = targets.to(device)
 		outputs = net(inputs)
@@ -135,6 +133,7 @@ if __name__=='__main__':
 	best_acc = 0
 	if args.resume is None:
 		for epoch in range(args.epochs):
+			cosine_lr_scheduler.step()
 			train(epoch)
 			best_acc = test(epoch, best_acc)
 			print('best test accuracy is ', best_acc)

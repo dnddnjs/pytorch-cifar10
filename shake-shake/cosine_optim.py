@@ -7,14 +7,12 @@ def _cosine_annealing(step, total_steps, lr_max, lr_min):
         1 + np.cos(step / total_steps * np.pi))
 
 
-def cosine_annealing_scheduler(optimizer, epochs, steps_per_epoch, lr):
-    total_steps = epochs * steps_per_epoch
-
+def cosine_annealing_scheduler(optimizer, epochs, lr):
     scheduler = lr_scheduler.LambdaLR(
         optimizer,
         lr_lambda=lambda step: _cosine_annealing(
             step,
-            total_steps,
+            epochs,
             lr,  # since lr_lambda computes multiplicative factor
             0))
 
