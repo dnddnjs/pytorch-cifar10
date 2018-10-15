@@ -8,6 +8,9 @@ width=550px>
 
 ## State of the art models
 
-- ResNet
-- DenseNet
-- Wide ResNet
+- ResNet: [paper](https://arxiv.org/pdf/1512.03385.pdf), [post]()
+- DenseNet: [paper](https://arxiv.org/pdf/1608.06993.pdf), [post]()
+- Wide-ResNet: [paper](https://arxiv.org/pdf/1605.07146.pdf), [post]()
+- Shake-shake: [paper]( https://arxiv.org/abs/1705.07485), [post]()
+- Shake-drop: [paper](https://arxiv.org/pdf/1802.02375.pdf)
+- Auto-augment: [paper](https://arxiv.org/pdf/1805.09501.pdf)
