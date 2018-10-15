@@ -78,11 +78,12 @@ class ShakeBlock(nn.Module):
             alpha = torch.rand(batch_size).to(device)
             beta = torch.rand(batch_size).to(device)
             beta = beta.view(batch_size, 1, 1, 1)
+            alpha = alpha.view(batch_size, 1, 1, 1)
+            out = self.shake_shake(out1, out2, alpha, beta)
         else:
             alpha = torch.Tensor([0.5]).to(device)
-        alpha = alpha.view(batch_size, 1, 1, 1)
+            out = self.shake_shake(out1, out2, alpha)
 
-        out = self.shake_shake(out1, out2, alpha, beta)
         skip = self.skipping_branch(residual)
         return out + skip
 
