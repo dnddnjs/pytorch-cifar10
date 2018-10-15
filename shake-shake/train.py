@@ -2,17 +2,17 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim import lr_scheduler
 import torch.backends.cudnn as cudnn
 
 import torchvision
 import torchvision.transforms as transforms
 
 from model import shake_shake
+from cosine_optim import cosine_annealing_scheduler
 import argparse
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
-parser.add_argument('--lr', default=0.1, help='')
+parser.add_argument('--lr', default=0.2, help='')
 parser.add_argument('--resume', default=None, help='')
 parser.add_argument('--batch_size', default=128, help='')
 parser.add_argument('--num_worker', default=4, help='')
@@ -57,11 +57,12 @@ if args.resume is not None:
 	net.load_state_dict(checkpoint['net'])
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=0.2, 
+optimizer = optim.SGD(net.parameters(), lr=args.lr, 
 	                  momentum=0.9, weight_decay=1e-4)
-step_lr_scheduler = lr_scheduler.CosineAnnealingLR(optimizer, 
-	                  T_max=len(train_loader) * args.epochs)
 
+
+step_lr_scheduler = cosine_annealing_scheduler(optimizer, 
+	                args.epochs, len(train_loader), args.lr)
 
 def train(epoch):
 	net.train()
