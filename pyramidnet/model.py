@@ -179,5 +179,5 @@ class PyramidNet(nn.Module):
 
 
 def pyramidnet(**kwargs):
-	model = PyramidNet(depth=272, alpha=200, num_classes=10, bottleneck=True, **kwargs) 
+	model = PyramidNet(depth=110, alpha=84, num_classes=10, bottleneck=False, **kwargs) 
 	return model
