@@ -131,11 +131,12 @@ def test(epoch, best_acc):
 
 if __name__=='__main__':
 	best_acc = 0
-	if args.resume is None:
-		for epoch in range(200):
-			step_lr_scheduler.step()
-			train(epoch)
-			best_acc = test(epoch, best_acc)
-
+	if args.resume is not None:
+	    best_acc = test(epoch=0, best_acc=0)
+	    print('best test accuracy is ', best_acc)
 	else:
-		test(epoch=0, best_acc=0)
+            for epoch in range(300):
+                step_lr_scheduler.step()
+                train(epoch)
+                best_acc = test(epoch, best_acc)
+                print('best test accuracy is ', best_acc)
