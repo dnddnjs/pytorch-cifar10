@@ -10,6 +10,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from controller import Controller
 from child import Child
+from cosine_optim import cosine_annealing_scheduler
 
 import argparse
 
@@ -65,16 +66,16 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 
 print('==> Making model..')
 controller_model = Controller()
-outputs = controller_model.sample_child()
 child_model = Child()
 
 criterion = nn.CrossEntropyLoss()
-child_optimizer = optim.SGD(child_model.parameters(), lr=0.1, 
-	                  momentum=0.9, weight_decay=1e-4)
-controller_optimizer = optim.Adam(controller_model.parameters(), lr=0.0001)
+child_optimizer = optim.SGD(child_model.parameters(), lr=0.05, 
+	                  momentum=0.9, weight_decay=1e-4, nesterov=True)
+cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr=0.05)
+controller_optimizer = optim.Adam(controller_model.parameters(), lr=0.00035)
 
 
-def train_child(model):
+def train_child(model, normal_arc, reduction_arc):
 	model.to(device)
 	model.train()
 
@@ -82,26 +83,27 @@ def train_child(model):
 	correct = 0
 	total = 0
 
-	for epoch in range(num_epochs):
-		for batch_idx, (inputs, targets) in enumerate(train_loader):
-			inputs = inputs.to(device)
-			targets = targets.to(device)
-			outputs = model(inputs)
-			loss = criterion(outputs, targets)
+	cosine_lr_scheduler.step()
 
-			optimizer.zero_grad()
-			loss.backward()
-			optimizer.step()
+	for batch_idx, (inputs, targets) in enumerate(train_loader):
+		inputs = inputs.to(device)
+		targets = targets.to(device)
+		outputs = model(inputs, normal_arc, reduction_arc)
+		loss = criterion(outputs, targets)
 
-			train_loss += loss.item()
-			_, predicted = outputs.max(1)
-			total += targets.size(0)
-			correct += predicted.eq(targets).sum().item()
-			if batch_idx % 10 == 0:
-				print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-					  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
+		optimizer.zero_grad()
+		loss.backward()
+		optimizer.step()
 
-	model.eval()
+		train_loss += loss.item()
+		_, predicted = outputs.max(1)
+		total += targets.size(0)
+		correct += predicted.eq(targets).sum().item()
+		if batch_idx % 10 == 0:
+			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+				  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
+
+		model.eval()
 
 	test_loss = 0
 	correct = 0
@@ -123,20 +125,40 @@ def train_child(model):
 				print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
 				  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
 
-	acc = 100 * correct / total
-	return acc, model
+	return model
 
 
-def train_controller(model, reward_seq, entropy_seq, log_prob_seq):
-	for i in range(num_cont_iter):
-		reward = reward_seq[-1]
-		baseline = np.mean(reward_seq)
+def train_controller(child, controller, running_reward, entropy_seq, log_prob_seq):
+	child.eval()
+	controller.train()
+
+	# todo: in paper controller has to be updated for 2000 times.
+	# but there is no information about mini-batch size. Need to be checked
+	for batch_idx, (inputs, targets) in enumerate(valid_loader):
+		correct = 0
+		total = 0
+
+		# 1. get reward using a single mini-batch of validation data
+		inputs = inputs.to(device)
+		targets = targets.to(device)
+		outputs = child(inputs)
+	
+		_, predicted = outputs.max(1)
+		total += targets.size(0)
+		correct += predicted.eq(targets).sum().item()
+		reward = correct / total
+
+		# 2. using the reward, train controller with REINFORCE
+		running_reward = 0.99 * running_reward + 0.01 * reward
+		baseline = running_reward
 		loss = - log_prob_seq * (reward - baseline)
-		loss = loss - entropy_coeffi * torch.mean(entropy_seq)
+		loss = loss - 0.1 * torch.mean(entropy_seq)
+
 		controller_optimizer.zero_grad()
 		loss.backward()
 		optimizer.step()
-	return model
+
+	return controller, running_reward
 
 
 def test_final_model(model):
@@ -147,7 +169,7 @@ def test_final_model(model):
 	total = 0
 
 	with torch.no_grad():
-		for batch_idx, (inputs, targets) in enumerate(valid_loader):
+		for batch_idx, (inputs, targets) in enumerate(test_loader):
 			inputs = inputs.to(device)
 			targets = targets.to(device)
 			outputs = model(inputs)
@@ -166,17 +188,16 @@ def test_final_model(model):
 	return acc
 
 
-def main():
-	reward_seq = []
-	for i in range(num_iter):
+def main(controller_model, child_model):
+	running_reward = 0
+	for epoch in range(310):
 		outputs = controller_model.sample_child()
 		normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
-		model = child_model.build_model(normal_arc, reduction_arc)
-		valid_acc, model = train_child(model)
-		reward_seq.append(valid_acc)
+		model = train_child(child_model, normal_arc, reduction_arc)
 
-		if i < num_iter - 1:
-			controller_model = train_controller(controller_model, reward_seq, entropy_seq, log_prob_seq)
+		if i < 310 - 1:
+			inputs = child_model, controller_model, running_reward, entropy_seq, log_prob_seq
+			controller_model, running_reward = train_controller(inputs)
 
 	final_model = model
 	final_acc = test_final_model(final_model)
@@ -184,4 +205,4 @@ def main():
 
 
 if __name__=="__main__":
-	main()
+	main(controller_model, child_model)

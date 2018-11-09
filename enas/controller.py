@@ -13,18 +13,26 @@ class Controller(nn.Module):
 		self.embed = nn.Embedding(num_embeddings=2+5, embedding_dim=self.lstm_size)
 		self.lstm = nn.LSTMCell(input_size=self.lstm_size, hidden_size=self.lstm_size)
 		## todo: add initializer for lstm
-		self.lstm.bias_ih.data.fill_(0)
-		self.lstm.bias_hh.data.fill_(0)
+		# self.lstm.bias_ih.data.fill_(0)
+		# self.lstm.bias_hh.data.fill_(0)
 		self.hx, self.cx = self.init_hidden(batch_size=1)
 		# 2 indices and 5 operations
+		# todo: not only node1 and node2, any other previous node can be input. need to be fixed 
 		self.fc_index = nn.Linear(in_features=self.lstm_size, out_features=2)
 		self.fc_ops = nn.Linear(in_features=self.lstm_size, out_features=5)
+		self.init_parameters()
 
 		self.temperature = 5.0
 		self.tanh_constant = 2.5
 
-	def reset_parameters(self):
-		pass
+	def init_parameters(self):
+		init_range = 0.1
+		for param in self.parameters():
+			param.data.uniform_(-init_range, init_range)
+
+		self.fc_index.bias.data.fill_(0)
+		self.fc_ops.bias.data.fill_(0)
+		
 
 	def init_hidden(self, batch_size):
 		hx = torch.zeros(batch_size, self.lstm_size).to(device)
