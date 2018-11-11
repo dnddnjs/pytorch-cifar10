@@ -5,9 +5,9 @@ import torch.nn.functional as F
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-class SkippingBranch(nn.Module):
+class ReduceBranch(nn.Module):
 	def __init__(self, planes, stride=2):
-		super(SkippingBranch, self).__init__()
+		super(ReduceBranch, self).__init__()
 		self.conv1 = nn.Conv2d(planes, planes, kernel_size=1, stride=1, 
 			padding=0, bias=False)
 		self.conv2 = nn.Conv2d(planes, planes, kernel_size=1, stride=1, 
@@ -152,6 +152,10 @@ class Child(nn.Module):
 			[Cell(self.normal_arc, 4*self.num_filters)]*2
 		)
 
+		self.reduce_module_list = nn.ModuleList(
+			[ReduceBranch(planes=self.num_filters),
+			ReduceBranch(planes=2*self.num_filters)]
+		)
 	def forward(self, x):
 		self.num_filters = 20
 		# make first two input
@@ -165,7 +169,7 @@ class Child(nn.Module):
 			cell_outputs = [cell_outputs[-1], x]
 			cell_id += 1
 		
-		reduce_input = SkippingBranch(planes=self.num_filters)
+		reduce_input = self.reduce_module_list[0]
 		self.num_filters *= 2
 		# todo: after reducing input, 
 		cell_outputs = [reduce_input(cell_outputs[0]), reduce_input(cell_outputs[1])]
@@ -179,7 +183,7 @@ class Child(nn.Module):
 			cell_outputs = [cell_outputs[-1], x]
 			cell_id += 1
 		
-		reduce_input = SkippingBranch(planes=self.num_filters)
+		reduce_input = self.reduce_module_list[1]
 		self.num_filters *= 2
 		# todo: after reducing input, 
 		cell_outputs = [reduce_input(cell_outputs[0]), reduce_input(cell_outputs[1])]
