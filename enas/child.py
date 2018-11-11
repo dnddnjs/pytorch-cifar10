@@ -9,9 +9,9 @@ class SkippingBranch(nn.Module):
 	def __init__(self, planes, stride=2):
 		super(SkippingBranch, self).__init__()
 		self.conv1 = nn.Conv2d(planes, planes, kernel_size=1, stride=1, 
-								padding=0, bias=False)
+			padding=0, bias=False)
 		self.conv2 = nn.Conv2d(planes, planes, kernel_size=1, stride=1, 
-								padding=0, bias=False)
+			padding=0, bias=False)
 		self.avg_pool = nn.AvgPool2d(kernel_size=1, stride=stride, padding=0)    
 
 	def forward(self, x):
@@ -25,19 +25,19 @@ class SkippingBranch(nn.Module):
 
 def conv3x3(planes, stride=1):
 	separable_conv = nn.Sequential(
-						nn.Conv2d(planes, planes, kernel_size=3, stride=stride, 
-						padding=1, groups=planes, bias=False),
-						nn.Conv2d(planes, planes, kernel_size=1, stride=stride, 
-						padding=0, bias=False))
+		nn.Conv2d(planes, planes, kernel_size=3, stride=stride, 
+		padding=1, groups=planes, bias=False),
+		nn.Conv2d(planes, planes, kernel_size=1, stride=stride, 
+		padding=0, bias=False))
 	return separable_conv
 
 
 def conv5x5(planes, stride=1):
 	separable_conv = nn.Sequential(
-						nn.Conv2d(planes, planes, kernel_size=5, stride=stride, 
-						padding=2, groups=planes, bias=False),
-						nn.Conv2d(planes, planes, kernel_size=1, stride=stride, 
-						padding=0, bias=False))
+		nn.Conv2d(planes, planes, kernel_size=5, stride=stride, 
+		padding=2, groups=planes, bias=False),
+		nn.Conv2d(planes, planes, kernel_size=1, stride=stride, 
+		padding=0, bias=False))
 	return separable_conv
 
 
@@ -48,14 +48,14 @@ def enas_conv(planes, kernel, stride=1):
 		conv = conv5x5
 
 	stack_conv = nn.Sequential(
-			nn.ReLU(inplace=False),
-			nn.BatchNorm2d(planes),
-			conv(planes, stride),
+		nn.ReLU(inplace=False),
+		nn.BatchNorm2d(planes),
+		conv(planes, stride),
 
-			nn.ReLU(inplace=False),
-			nn.BatchNorm2d(planes),
-			conv(planes, stride)
-		)
+		nn.ReLU(inplace=False),
+		nn.BatchNorm2d(planes),
+		conv(planes, stride)
+	)
 	return stack_conv
 
 
@@ -81,7 +81,7 @@ class Cell(nn.Module):
 		self.arc = arc
 		self.node_list = nn.ModuleList([Node(self.planes)]*10)
 		self.conv_list = nn.ModuleList([nn.Conv2d(self.planes, self.planes, kernel_size=1, stride=1, 
-						padding=0, bias=False)]*7)
+			padding=0, bias=False)]*7)
 		self.bn = nn.BatchNorm2d(self.planes)
 		self.relu = nn.ReLU(inplace=False)
 
@@ -145,12 +145,12 @@ class Child(nn.Module):
 		self.reduction_arc = reduction_arc
 		# if architecture change..?
 		self.cell_list = nn.ModuleList(
-				[Cell(self.normal_arc, self.num_filters)]*2 + \
-				[Cell(self.reduction_arc, 2*self.num_filters)] + \
-				[Cell(self.normal_arc, 2*self.num_filters)]*2 + \
-				[Cell(self.reduction_arc, 4*self.num_filters)] + \
-				[Cell(self.normal_arc, 4*self.num_filters)]*2
-			)
+			[Cell(self.normal_arc, self.num_filters)]*2 + \
+			[Cell(self.reduction_arc, 2*self.num_filters)] + \
+			[Cell(self.normal_arc, 2*self.num_filters)]*2 + \
+			[Cell(self.reduction_arc, 4*self.num_filters)] + \
+			[Cell(self.normal_arc, 4*self.num_filters)]*2
+		)
 
 	def forward(self, x):
 		self.num_filters = 20
