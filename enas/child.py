@@ -30,27 +30,29 @@ def conv(kernel, planes):
 class Child(nn.Module):
 	def __init__(self, num_classes=10):
 		super(Child, self).__init__()
+		self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, 
+			                   padding=1, bias=False)
+		self.bn1 = nn.BatchNorm2d(16)
+		self.relu = nn.ReLU(inplace=True)
 		self.avg_pool = nn.AvgPool2d(8, stride=1)
 		self.fc_out = nn.Linear(64, num_classes)
 
-	def enas_cell(self, normal_arc, reduction_arc):
-		return normal_cell, reduction_cell
+	def normal_cell(self, x, normal_arc):
+		return x
 
-	def build_model(self, normal_arc, reduction_arc):
-		outputs = self.enas_cell(normal_arc, reduction_arc)
-		normal_cell, reduction_cell = outputs
+	def reduction_cell(self, x, reduction_arc):
+		return x
 
+	def forward(self, x, normal_arc, reduction_arc):
+		# make first two input
+		x = self.relu(self.bn1(self.conv1(x)))
+		cell_outputs = [x, x]
 
-		return model
-
-	def forward(self, x):
-		cell_outputs = []
-		
-		for layer in range(num_layers):
+		for layer in range(5):
 			for i in range(num_normal_cells):
-				x = normal_cell(x, cell_outputs)
+				x = normal_cell(x, normal_arc, cell_outputs)
 				cell_outputs.append(x)
-			x = reduction_cell(x, cell_outputs)
+			x = reduction_cell(x, reduction_arc, cell_outputs)
 			cell_outputs.append(x)
 		
 		x = self.avg_pool(x)

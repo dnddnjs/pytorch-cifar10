@@ -113,7 +113,7 @@ def train_child(model, normal_arc, reduction_arc):
 		for batch_idx, (inputs, targets) in enumerate(valid_loader):
 			inputs = inputs.to(device)
 			targets = targets.to(device)
-			outputs = model(inputs)
+			outputs = model(inputs, normal_arc, reduction_arc)
 			loss = criterion(outputs, targets)
 
 			test_loss += loss.item()
@@ -152,7 +152,7 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		running_reward = 0.99 * running_reward + 0.01 * reward
 		baseline = running_reward
 		loss = - log_prob_seq * (reward - baseline)
-		loss = loss - 0.1 * torch.mean(entropy_seq)
+		loss = loss - 0.0001 * torch.mean(entropy_seq)
 
 		controller_optimizer.zero_grad()
 		loss.backward()
@@ -196,7 +196,7 @@ def main(controller_model, child_model):
 		model = train_child(child_model, normal_arc, reduction_arc)
 
 		if i < 310 - 1:
-			inputs = child_model, controller_model, running_reward, entropy_seq, log_prob_seq
+			inputs = model, controller_model, running_reward, entropy_seq, log_prob_seq
 			controller_model, running_reward = train_controller(inputs)
 
 	final_model = model
