@@ -47,8 +47,8 @@ class Controller(nn.Module):
 		cx = torch.zeros(batch_size, self.lstm_size).to(device)
 		return (hx, cx)
 
-    # anchor is a placeholder for saving previous cell's lstm output
-    # anchor_w is little different from anchor. The linear transformation of lstm output is saved 
+	# anchor is a placeholder for saving previous cell's lstm output
+	# anchor_w is little different from anchor. The linear transformation of lstm output is saved 
 	def sample_cell(self, arc_seq, entropy_list, log_prob_list):
 		# lstm should have a dynamic size of output for indices of previous layer.
 		# so save previous lstm outputs and fc outputs as a list

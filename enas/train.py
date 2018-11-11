@@ -17,7 +17,7 @@ import argparse
 parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.1, help='')
 parser.add_argument('--resume', default=None, help='')
-parser.add_argument('--batch_size', default=128, help='')
+parser.add_argument('--batch_size', default=32, help='')
 parser.add_argument('--num_worker', default=4, help='')
 parser.add_argument('--valid_size', default=0.1, help='')
 args = parser.parse_args()
@@ -66,16 +66,11 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 
 print('==> Making model..')
 controller_model = Controller()
-child_model = Child()
-
 criterion = nn.CrossEntropyLoss()
-child_optimizer = optim.SGD(child_model.parameters(), lr=0.05, 
-	                  momentum=0.9, weight_decay=1e-4, nesterov=True)
-cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr=0.05)
 controller_optimizer = optim.Adam(controller_model.parameters(), lr=0.00035)
 
 
-def train_child(model, normal_arc, reduction_arc):
+def train_child(epoch, model, child_optimizer):
 	model.to(device)
 	model.train()
 
@@ -83,25 +78,25 @@ def train_child(model, normal_arc, reduction_arc):
 	correct = 0
 	total = 0
 
-	cosine_lr_scheduler.step()
+	# cosine_lr_scheduler.step()
 
 	for batch_idx, (inputs, targets) in enumerate(train_loader):
 		inputs = inputs.to(device)
 		targets = targets.to(device)
-		outputs = model(inputs, normal_arc, reduction_arc)
+		outputs = model(inputs)
 		loss = criterion(outputs, targets)
 
-		optimizer.zero_grad()
+		child_optimizer.zero_grad()
 		loss.backward()
-		optimizer.step()
+		child_optimizer.step()
 
 		train_loss += loss.item()
 		_, predicted = outputs.max(1)
 		total += targets.size(0)
 		correct += predicted.eq(targets).sum().item()
-		if batch_idx % 10 == 0:
-			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-				  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
+		# if batch_idx % 10 == 0:
+		print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
 
 		model.eval()
 
@@ -113,7 +108,7 @@ def train_child(model, normal_arc, reduction_arc):
 		for batch_idx, (inputs, targets) in enumerate(valid_loader):
 			inputs = inputs.to(device)
 			targets = targets.to(device)
-			outputs = model(inputs, normal_arc, reduction_arc)
+			outputs = model(inputs)
 			loss = criterion(outputs, targets)
 
 			test_loss += loss.item()
@@ -121,9 +116,9 @@ def train_child(model, normal_arc, reduction_arc):
 			total += targets.size(0)
 			correct += predicted.eq(targets).sum().item()
 			
-			if batch_idx % 10 == 0:
-				print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-				  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
+			# if batch_idx % 10 == 0:
+			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
 
 	return model
 
@@ -156,7 +151,7 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 
 		controller_optimizer.zero_grad()
 		loss.backward()
-		optimizer.step()
+		controller_optimizer.step()
 
 	return controller, running_reward
 
@@ -180,20 +175,23 @@ def test_final_model(model):
 			total += targets.size(0)
 			correct += predicted.eq(targets).sum().item()
 			
-			if batch_idx % 10 == 0:
-				print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-				  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
+			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
 
 	acc = 100 * correct / total
 	return acc
 
 
-def main(controller_model, child_model):
+def main(controller_model, cosine_annealing_scheduler):
 	running_reward = 0
 	for epoch in range(310):
 		outputs = controller_model.sample_child()
 		normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
-		model = train_child(child_model, normal_arc, reduction_arc)
+		child_model = Child(normal_arc, reduction_arc)
+		child_optimizer = optim.SGD(child_model.parameters(), lr=0.05, 
+	                  momentum=0.9, weight_decay=1e-4, nesterov=True)
+		# cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr=0.05)
+		model = train_child(epoch, child_model, child_optimizer)
 
 		if i < 310 - 1:
 			inputs = model, controller_model, running_reward, entropy_seq, log_prob_seq
@@ -205,4 +203,4 @@ def main(controller_model, child_model):
 
 
 if __name__=="__main__":
-	main(controller_model, child_model)
+	main(controller_model, cosine_annealing_scheduler)
