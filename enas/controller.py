@@ -53,7 +53,7 @@ class Controller(nn.Module):
 		# lstm should have a dynamic size of output for indices of previous layer.
 		# so save previous lstm outputs and fc outputs as a list
 		prev_lstm_outputs, prev_fc_outputs = [], []
-		inputs = torch.zeros(1).long()
+		inputs = torch.zeros(1).long().to(device)
 		inputs = self.embed_first(inputs)
 		for node_id in range(2):
 			hidden = (self.hx, self.cx)
