@@ -63,7 +63,7 @@ class Controller(nn.Module):
 
 		for node_id in range(2, self.num_nodes):
 			# indices for previous nodes
-			indices = torch.range(0, node_id).long()
+			indices = torch.range(0, node_id).long().to(device)
 
 			# sample 2 indices to select input of the node
 			for i in range(2):
@@ -116,7 +116,7 @@ class Controller(nn.Module):
 			self.hx, self.cx = self.lstm(inputs, hidden)
 			prev_lstm_outputs.append(self.hx.clone())
 			prev_fc_outputs.append(self.fc_index_prev(self.hx.clone()))
-			inputs = torch.zeros(1).long()
+			inputs = torch.zeros(1).long().to(device)
 			inputs = self.embed_first(inputs)
 		return arc_seq, entropy_list, log_prob_list
 
