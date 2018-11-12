@@ -96,14 +96,14 @@ class Cell(nn.Module):
 			x_op = node_arc[2]
 			x = prev_outputs[x_id, :, : ,:].squeeze(0)
 			x = self.node_list[2*i](x, x_op)
-			x_one_hot = torch.zeros(7)
+			x_one_hot = torch.zeros(7).to(device)
 			x_one_hot.scatter_(0, x_id, 1)
 
 			y_id = node_arc[1]
 			y_op = node_arc[3]
 			y = prev_outputs[y_id, :, : ,:].squeeze(0)
 			y = self.node_list[2*i+1](y, y_op)
-			y_one_hot = torch.zeros(7)
+			y_one_hot = torch.zeros(7).to(device)
 			y_one_hot.scatter_(0, y_id, 1)
 
 			out = x + y
