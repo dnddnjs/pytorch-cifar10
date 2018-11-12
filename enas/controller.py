@@ -98,7 +98,7 @@ class Controller(nn.Module):
 				logits /= self.temperature
 				logits = self.tanh_constant*F.tanh(logits)
 				init_bias = [0.25, 0.25, -0.25, -0.25, -0.25]
-				logits += torch.Tensor(np.array(init_bias))
+				logits += torch.Tensor(np.array(init_bias)).to(device)
 
 				probs = F.softmax(logits, dim=-1)
 				log_prob = F.log_softmax(logits, dim=-1)
