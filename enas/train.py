@@ -116,9 +116,9 @@ def train_child(epoch, model, child_optimizer):
 			total += targets.size(0)
 			correct += predicted.eq(targets).sum().item()
 			
-			# if batch_idx % 10 == 0:
-			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-			  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
+			if batch_idx % 10 == 0:
+				print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			  	len(valid_loader), test_loss/(batch_idx+1), 100 * correct/total))
 
 	return model
 
@@ -146,6 +146,7 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		# 2. using the reward, train controller with REINFORCE
 		running_reward = 0.99 * running_reward + 0.01 * reward
 		baseline = running_reward
+		log_prob = torch.sum(log_prob_seq)
 		loss = - log_prob_seq * (reward - baseline)
 		loss = loss - 0.0001 * torch.mean(entropy_seq)
 
