@@ -146,7 +146,7 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		# 2. using the reward, train controller with REINFORCE
 		running_reward = 0.99 * running_reward + 0.01 * reward
 		baseline = running_reward
-		log_prob = torch.Tensor(np.array(log_prob_seq))
+		log_prob = torch.Tensor(log_prob_seq)
 		log_prob = torch.sum(log_prob).to(device)
 		loss = - log_prob_seq * (reward - baseline)
 		loss = loss - 0.0001 * torch.mean(entropy_seq)
