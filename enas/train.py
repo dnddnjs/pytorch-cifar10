@@ -194,8 +194,7 @@ def main(controller_model, cosine_annealing_scheduler):
 		model = train_child(epoch, child_model, child_optimizer)
 
 		if epoch < 310 - 1:
-			inputs = (model, controller_model, running_reward, entropy_seq, log_prob_seq)
-			controller_model, running_reward = train_controller(inputs)
+			controller_model, running_reward = train_controller(model, controller_model, running_reward, entropy_seq, log_prob_seq)
 
 	final_model = model
 	final_acc = test_final_model(final_model)
