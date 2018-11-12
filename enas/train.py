@@ -94,10 +94,10 @@ def train_child(epoch, model, child_optimizer):
 		_, predicted = outputs.max(1)
 		total += targets.size(0)
 		correct += predicted.eq(targets).sum().item()
-		# if batch_idx % 10 == 0:
-		print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-			  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
-
+		if batch_idx % 10 == 0:
+			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			 	len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
+			break
 
 	model.eval()
 	test_loss = 0
@@ -194,7 +194,7 @@ def main(controller_model, cosine_annealing_scheduler):
 		model = train_child(epoch, child_model, child_optimizer)
 
 		if epoch < 310 - 1:
-			inputs = model, controller_model, running_reward, entropy_seq, log_prob_seq
+			inputs = (model, controller_model, running_reward, entropy_seq, log_prob_seq)
 			controller_model, running_reward = train_controller(inputs)
 
 	final_model = model
