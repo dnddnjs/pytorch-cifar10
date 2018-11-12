@@ -103,7 +103,7 @@ def train_child(epoch, model, child_optimizer):
 	test_loss = 0
 	correct = 0
 	total = 0
-
+	'''
 	with torch.no_grad():
 		for batch_idx, (inputs, targets) in enumerate(valid_loader):
 			inputs = inputs.to(device)
@@ -119,7 +119,7 @@ def train_child(epoch, model, child_optimizer):
 			if batch_idx % 10 == 0:
 				print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
 			  	len(valid_loader), test_loss/(batch_idx+1), 100 * correct/total))
-
+	'''
 	return model
 
 
@@ -146,7 +146,8 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		# 2. using the reward, train controller with REINFORCE
 		running_reward = 0.99 * running_reward + 0.01 * reward
 		baseline = running_reward
-		log_prob = torch.sum(log_prob_seq)
+		log_prob = torch.Tensor(np.array(log_prob_seq))
+		log_prob = torch.sum(log_prob).to(device)
 		loss = - log_prob_seq * (reward - baseline)
 		loss = loss - 0.0001 * torch.mean(entropy_seq)
 
