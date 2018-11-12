@@ -68,7 +68,7 @@ class Node(nn.Module):
 		self.maxpool = nn.MaxPool2d(kernel_size=3, stride=stride, padding=1)
 
 	def forward(self, x, op_id):
-		print(x.size())
+		# print(x.size())
 		out = [self.conv3x3(x), self.conv5x5(x), self.avgpool(x), self.maxpool(x), x]
 		out = out[op_id]
 		return out
