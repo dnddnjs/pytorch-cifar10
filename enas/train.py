@@ -65,7 +65,7 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 	       'dog', 'frog', 'horse', 'ship', 'truck')
 
 print('==> Making model..')
-controller_model = Controller()
+controller_model = Controller().to(device)
 criterion = nn.CrossEntropyLoss()
 controller_optimizer = optim.Adam(controller_model.parameters(), lr=0.00035)
 
