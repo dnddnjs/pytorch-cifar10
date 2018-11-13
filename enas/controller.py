@@ -107,7 +107,7 @@ class Controller(nn.Module):
 				
 				selected_log_prob = log_prob[:, action.long()]
 				entropy = -(log_prob * probs).sum(1, keepdim=False)
-				entropy_list.append(entropy.data.cpu())
+				entropy_list.append(entropy)
 				log_prob_list.append(selected_log_prob)
 
 				inputs = self.embed_ops(action)

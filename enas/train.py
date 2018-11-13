@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.1, help='')
 parser.add_argument('--resume', default=None, help='')
 parser.add_argument('--batch_size', default=32, help='')
-parser.add_argument('--num_worker', default=2, help='')
+parser.add_argument('--num_worker', default=4, help='')
 parser.add_argument('--valid_size', default=0.1, help='')
 args = parser.parse_args()
 
@@ -67,7 +67,7 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 print('==> Making model..')
 controller_model = Controller().to(device)
 criterion = nn.CrossEntropyLoss()
-controller_optimizer = optim.Adam(controller_model.parameters(), lr=0.00035)
+controller_optimizer = optim.Adam(controller_model.parameters(), lr=0.0035)
 
 
 def train_child(epoch, model, child_optimizer):
@@ -97,7 +97,6 @@ def train_child(epoch, model, child_optimizer):
 		if batch_idx % 10 == 0:
 			print('train child epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
 			 	len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
-			break
 
 	model.eval()
 	test_loss = 0
@@ -146,10 +145,9 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		# 2. using the reward, train controller with REINFORCE
 		running_reward = 0.99 * running_reward + 0.01 * reward
 		baseline = running_reward
-		log_prob = np.sum(log_prob_seq)
-		log_prob = torch.Tensor(log_prob).to(device)
-		entropy = np.sum(entropy_seq)
-		entropy_bonus = torch.Tensor(entropy).to(device)
+		log_prob = torch.cat(log_prob_seq, dim=0).sum()
+		entropy = torch.cat(entropy_seq, dim=0).sum()
+		entropy_bonus = entropy
 
 		loss = - log_prob * (reward - baseline)
 		loss = loss - 0.0001 * entropy_bonus.detach()
@@ -160,7 +158,6 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 
 		print('train controller : [{}/{}]| loss: {:.3f} | reward: {:.3f}'.format(batch_idx, 
 			len(valid_loader), loss.item(), reward))
-		break
 
 	return controller, running_reward
 
