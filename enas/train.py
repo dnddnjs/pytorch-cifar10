@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.1, help='')
 parser.add_argument('--resume', default=None, help='')
 parser.add_argument('--batch_size', default=32, help='')
-parser.add_argument('--num_worker', default=4, help='')
+parser.add_argument('--num_worker', default=2, help='')
 parser.add_argument('--valid_size', default=0.1, help='')
 args = parser.parse_args()
 
@@ -95,7 +95,7 @@ def train_child(epoch, model, child_optimizer):
 		total += targets.size(0)
 		correct += predicted.eq(targets).sum().item()
 		if batch_idx % 10 == 0:
-			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			print('train child epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
 			 	len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
 			break
 
@@ -146,14 +146,21 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		# 2. using the reward, train controller with REINFORCE
 		running_reward = 0.99 * running_reward + 0.01 * reward
 		baseline = running_reward
-		log_prob = torch.Tensor(log_prob_seq)
-		log_prob = torch.sum(log_prob).to(device)
-		loss = - log_prob_seq * (reward - baseline)
-		loss = loss - 0.0001 * torch.mean(entropy_seq)
+		log_prob = np.sum(log_prob_seq)
+		log_prob = torch.Tensor(log_prob).to(device)
+		entropy = np.sum(entropy_seq)
+		entropy_bonus = torch.Tensor(entropy).to(device)
+
+		loss = - log_prob * (reward - baseline)
+		loss = loss - 0.0001 * entropy_bonus.detach()
 
 		controller_optimizer.zero_grad()
-		loss.backward()
+		loss.backward(retain_graph=True)
 		controller_optimizer.step()
+
+		print('train controller : [{}/{}]| loss: {:.3f} | reward: {:.3f}'.format(batch_idx, 
+			len(valid_loader), loss.item(), reward))
+		break
 
 	return controller, running_reward
 
@@ -177,7 +184,7 @@ def test_final_model(model):
 			total += targets.size(0)
 			correct += predicted.eq(targets).sum().item()
 			
-			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
+			print('epoch : [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
 			  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
 
 	acc = 100 * correct / total
@@ -189,11 +196,16 @@ def main(controller_model, cosine_annealing_scheduler):
 	for epoch in range(310):
 		outputs = controller_model.sample_child()
 		normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
-		child_model = Child(normal_arc, reduction_arc)
-		child_optimizer = optim.SGD(child_model.parameters(), lr=0.05, 
-	                  momentum=0.9, weight_decay=1e-4, nesterov=True)
+		model = Child(normal_arc, reduction_arc)
+		if epoch == 0:
+			child_optimizer = optim.SGD(model.parameters(), lr=0.05, 
+		                      momentum=0.9, weight_decay=1e-4, nesterov=True)
+		else:
+			model.load_state_dict(torch.load('./save_model/child.pt'))
+
 		# cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr=0.05)
-		model = train_child(epoch, child_model, child_optimizer)
+		model = train_child(epoch, model, child_optimizer)
+		torch.save(model.state_dict(), './save_model/child.pt')
 
 		if epoch < 310 - 1:
 			controller_model, running_reward = train_controller(model, controller_model, running_reward, entropy_seq, log_prob_seq)
