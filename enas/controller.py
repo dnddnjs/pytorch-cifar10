@@ -86,7 +86,7 @@ class Controller(nn.Module):
 				selected_log_prob = log_prob[:, action.long()]
 				entropy = -(log_prob * probs).sum(1, keepdim=False)
 				entropy_list.append(entropy)
-				log_prob_list.append(log_prob)
+				log_prob_list.append(selected_log_prob)
 				# next input for lstm is the output of selected previous node index
 				inputs = prev_lstm_outputs[action]
 
@@ -107,8 +107,8 @@ class Controller(nn.Module):
 				
 				selected_log_prob = log_prob[:, action.long()]
 				entropy = -(log_prob * probs).sum(1, keepdim=False)
-				entropy_list.append(entropy)
-				log_prob_list.append(log_prob)
+				entropy_list.append(entropy.data.cpu())
+				log_prob_list.append(selected_log_prob)
 
 				inputs = self.embed_ops(action)
 
@@ -118,6 +118,7 @@ class Controller(nn.Module):
 			prev_fc_outputs.append(self.fc_index_prev(self.hx.clone()))
 			inputs = torch.zeros(1).long().to(device)
 			inputs = self.embed_first(inputs)
+		
 		return arc_seq, entropy_list, log_prob_list
 
 
