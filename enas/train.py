@@ -17,7 +17,7 @@ import argparse
 parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.1, help='')
 parser.add_argument('--resume', default=None, help='')
-parser.add_argument('--batch_size', default=32, help='')
+parser.add_argument('--batch_size', default=128, help='')
 parser.add_argument('--num_worker', default=4, help='')
 parser.add_argument('--valid_size', default=0.1, help='')
 args = parser.parse_args()
@@ -70,7 +70,7 @@ criterion = nn.CrossEntropyLoss()
 controller_optimizer = optim.Adam(controller_model.parameters(), lr=0.0035)
 
 
-def train_child(epoch, model, child_optimizer):
+def train_child(epoch, model, child_optimizer, normal_arc, reduction_arc):
 	model.to(device)
 	model.train()
 
@@ -83,7 +83,7 @@ def train_child(epoch, model, child_optimizer):
 	for batch_idx, (inputs, targets) in enumerate(train_loader):
 		inputs = inputs.to(device)
 		targets = targets.to(device)
-		outputs = model(inputs)
+		outputs = model(inputs, normal_arc, reduction_arc)
 		loss = criterion(outputs, targets)
 
 		child_optimizer.zero_grad()
@@ -122,12 +122,14 @@ def train_child(epoch, model, child_optimizer):
 	return model
 
 
-def train_controller(child, controller, running_reward, entropy_seq, log_prob_seq):
+def train_controller(child, controller, running_reward, entropy_seq, log_prob_seq, normal_arc, reduction_arc):
 	child.eval()
 	controller.train()
 
 	# todo: in paper controller has to be updated for 2000 times.
 	# but there is no information about mini-batch size. Need to be checked
+	# question: if update controller once then the child is the output of previous controller model
+	# is it right to update controller after gather all reward from validation dataset?
 	for batch_idx, (inputs, targets) in enumerate(valid_loader):
 		correct = 0
 		total = 0
@@ -135,7 +137,7 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		# 1. get reward using a single mini-batch of validation data
 		inputs = inputs.to(device)
 		targets = targets.to(device)
-		outputs = child(inputs)
+		outputs = child(inputs, normal_arc, reduction_arc)
 	
 		_, predicted = outputs.max(1)
 		total += targets.size(0)
@@ -155,9 +157,10 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		controller_optimizer.zero_grad()
 		loss.backward(retain_graph=True)
 		controller_optimizer.step()
-
-		print('train controller : [{}/{}]| loss: {:.3f} | reward: {:.3f}'.format(batch_idx, 
-			len(valid_loader), loss.item(), reward))
+		
+		if batch_idx % 10 == 0:
+			print('train controller : [{}/{}]| loss: {:.3f} | reward: {:.3f}'.format(batch_idx, 
+				len(valid_loader), loss.item(), reward))
 
 	return controller, running_reward
 
@@ -193,7 +196,8 @@ def main(controller_model, cosine_annealing_scheduler):
 	for epoch in range(310):
 		outputs = controller_model.sample_child()
 		normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
-		model = Child(normal_arc, reduction_arc)
+		model = Child()
+
 		if epoch == 0:
 			child_optimizer = optim.SGD(model.parameters(), lr=0.05, 
 		                      momentum=0.9, weight_decay=1e-4, nesterov=True)
@@ -201,11 +205,11 @@ def main(controller_model, cosine_annealing_scheduler):
 			model.load_state_dict(torch.load('./save_model/child.pt'))
 
 		# cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr=0.05)
-		model = train_child(epoch, model, child_optimizer)
+		model = train_child(epoch, model, child_optimizer, normal_arc, reduction_arc)
 		torch.save(model.state_dict(), './save_model/child.pt')
 
 		if epoch < 310 - 1:
-			controller_model, running_reward = train_controller(model, controller_model, running_reward, entropy_seq, log_prob_seq)
+			controller_model, running_reward = train_controller(model, controller_model, running_reward, entropy_seq, log_prob_seq, normal_arc, reduction_arc)
 
 	final_model = model
 	final_acc = test_final_model(final_model)
