@@ -78,7 +78,7 @@ class Controller(nn.Module):
 				logits = self.tanh_constant * F.tanh(logits)
 				probs = F.softmax(logits, dim=-1)
 				log_prob = F.log_softmax(logits, dim=-1)
-				action = torch.multinomial(probs, 1)[0].detach()
+				action = torch.multinomial(probs, 1)[0]
 				arc_seq.append(action)
 
 				selected_log_prob = log_prob[:, action.long()]
@@ -99,7 +99,7 @@ class Controller(nn.Module):
 
 				probs = F.softmax(logits, dim=-1)
 				log_prob = F.log_softmax(logits, dim=-1)
-				action = torch.multinomial(probs, 1)[0].detach()
+				action = torch.multinomial(probs, 1)[0]
 				arc_seq.append(action)
 
 				selected_log_prob = log_prob[:, action.long()]
