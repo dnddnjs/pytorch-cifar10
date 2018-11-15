@@ -194,6 +194,7 @@ def test_final_model(model):
 def main(controller_model, cosine_annealing_scheduler):
 	running_reward = 0
 	for epoch in range(310):
+		controller_model.init_hidden()
 		outputs = controller_model.sample_child()
 		normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
 		model = Child()
