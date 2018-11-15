@@ -20,7 +20,7 @@ class Controller(nn.Module):
 		self.embed_ops = nn.Embedding(num_embeddings=5, embedding_dim=self.lstm_size)
 		self.lstm = nn.LSTMCell(input_size=self.lstm_size, hidden_size=self.lstm_size, bias=False)
 
-		self.hx, self.cx = self.init_hidden(batch_size=1)
+		self.init_hidden(batch_size=1)
 
 		# fully-connected layers for index of previous cell outputs
 		self.fc_index_prev = nn.Linear(in_features=self.lstm_size, out_features=self.lstm_size, bias=False)
@@ -34,17 +34,16 @@ class Controller(nn.Module):
 		self.init_parameters()
 
 	def init_parameters(self):
-		torch.nn.init.xavier_uniform(self.embed_first.weight)
-		torch.nn.init.xavier_uniform(self.embed_ops.weight)
-		torch.nn.init.xavier_uniform(self.lstm.weight_hh)
-		torch.nn.init.xavier_uniform(self.lstm.weight_ih)
+		torch.nn.init.xavier_uniform_(self.embed_first.weight)
+		torch.nn.init.xavier_uniform_(self.embed_ops.weight)
+		torch.nn.init.xavier_uniform_(self.lstm.weight_hh)
+		torch.nn.init.xavier_uniform_(self.lstm.weight_ih)
 
 		self.fc_ops.bias.data = torch.Tensor([10, 10, 0, 0, 0])
 
 	def init_hidden(self, batch_size):
-		hx = torch.zeros(batch_size, self.lstm_size).to(device)
-		cx = torch.zeros(batch_size, self.lstm_size).to(device)
-		return (hx, cx)
+		self.hx = torch.zeros(batch_size, self.lstm_size).to(device)
+		self.cx = torch.zeros(batch_size, self.lstm_size).to(device)
 
 	# prev_lstm_outputs is a placeholder for saving previous cell's lstm output
 	# The linear transformation of lstm output is saved at prev_fc_outputs.
@@ -71,11 +70,11 @@ class Controller(nn.Module):
 				# todo: need to be fixed
 				logits = self.fc_index_curr(self.hx)
 				query = torch.cat(prev_fc_outputs)
-				query = F.tanh(query + logits)
+				query = torch.tanh(query + logits)
 				query = self.fc_index_out(query)
 				logits = query.view(query.size(-1), -1)
 
-				logits = self.tanh_constant * F.tanh(logits)
+				logits = self.tanh_constant * torch.tanh(logits)
 				probs = F.softmax(logits, dim=-1)
 				log_prob = F.log_softmax(logits, dim=-1)
 				action = torch.multinomial(probs, 1)[0]
@@ -93,7 +92,7 @@ class Controller(nn.Module):
 				hidden = (self.hx, self.cx)
 				self.hx, self.cx = self.lstm(inputs, hidden)
 				logits = self.fc_ops(self.hx)
-				logits = (self.tanh_constant / self.op_tanh_reduce) * F.tanh(logits)
+				logits = (self.tanh_constant / self.op_tanh_reduce) * torch.tanh(logits)
 				if use_additional_bias:
 					logits += self.additional_bias
 
