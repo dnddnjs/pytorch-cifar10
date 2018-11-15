@@ -8,10 +8,10 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 class ReduceBranch(nn.Module):
 	def __init__(self, planes, stride=2):
 		super(ReduceBranch, self).__init__()
-		self.conv1 = nn.Conv2d(planes, planes, kernel_size=1, stride=1, 
-			padding=0, bias=False)
-		self.conv2 = nn.Conv2d(planes, planes, kernel_size=1, stride=1, 
-			padding=0, bias=False)
+		self.conv1 = nn.Conv2d(planes, planes, kernel_size=1, 
+							   stride=1, padding=0, bias=False)
+		self.conv2 = nn.Conv2d(planes, planes, kernel_size=1, 
+							   stride=1, padding=0, bias=False)
 		self.avg_pool = nn.AvgPool2d(kernel_size=1, stride=stride, padding=0)    
 
 	def forward(self, x):
@@ -23,38 +23,29 @@ class ReduceBranch(nn.Module):
 		return out
 
 
-def conv3x3(planes, stride=1):
-	separable_conv = nn.Sequential(
-		nn.Conv2d(planes, planes, kernel_size=3, stride=stride, 
-		padding=1, groups=planes, bias=False),
-		nn.Conv2d(planes, planes, kernel_size=1, stride=stride, 
-		padding=0, bias=False))
-	return separable_conv
-
-
-def conv5x5(planes, stride=1):
-	separable_conv = nn.Sequential(
-		nn.Conv2d(planes, planes, kernel_size=5, stride=stride, 
-		padding=2, groups=planes, bias=False),
-		nn.Conv2d(planes, planes, kernel_size=1, stride=stride, 
-		padding=0, bias=False))
-	return separable_conv
-
-
 def enas_conv(planes, kernel, stride=1):
-	if kernel == 3:
-		conv = conv3x3
-	else:
-		conv = conv5x5
+	seperable_conv3x3 = nn.Sequential(
+		nn.Conv2d(planes, planes, kernel_size=3, stride=stride, 
+				  padding=1, groups=planes, bias=False),
+		nn.Conv2d(planes, planes, kernel_size=1, stride=stride, 
+				  padding=0, bias=False))
+	
+	seperable_conv5x5 = nn.Sequential(
+		nn.Conv2d(planes, planes, kernel_size=5, stride=stride, 
+				  padding=2, groups=planes, bias=False),
+		nn.Conv2d(planes, planes, kernel_size=1, stride=stride, 
+				  padding=0, bias=False))
+
+	conv = seperable_conv3x3 if kernel == 3 else seperable_conv5x5
 
 	stack_conv = nn.Sequential(
-		nn.ReLU(inplace=False),
-		nn.BatchNorm2d(planes),
-		conv(planes, stride),
-
-		nn.ReLU(inplace=False),
-		nn.BatchNorm2d(planes),
-		conv(planes, stride)
+		nn.ReLU(inplace=False), 
+		nn.BatchNorm2d(planes), 
+		conv,
+		
+		nn.ReLU(inplace=False), 
+		nn.BatchNorm2d(planes), 
+		conv
 	)
 	return stack_conv
 
@@ -62,25 +53,28 @@ def enas_conv(planes, kernel, stride=1):
 class Node(nn.Module):
 	def __init__(self, planes, stride=1):
 		super(Node, self).__init__()
-		self.conv3x3 = enas_conv(planes, 3, stride)
-		self.conv5x5 = enas_conv(planes, 5, stride)
-		self.avgpool = nn.AvgPool2d(kernel_size=3, stride=stride, padding=1)
-		self.maxpool = nn.MaxPool2d(kernel_size=3, stride=stride, padding=1)
+		conv3x3 = enas_conv(planes, 3, stride)
+		conv5x5 = enas_conv(planes, 5, stride)
+		avgpool = nn.AvgPool2d(kernel_size=3, stride=stride, padding=1)
+		maxpool = nn.MaxPool2d(kernel_size=3, stride=stride, padding=1)
+		self.ops = nn.ModuleList([conv3x3, conv5x5, avgpool, maxpool])
 
 	def forward(self, x, op_id):
-		# print(x.size())
-		out = [self.conv3x3(x), self.conv5x5(x), self.avgpool(x), self.maxpool(x), x]
-		out = out[op_id]
+		# op_id 4 is for the identity mapping. Identity mapping can't be included by nn.modulelist
+		if op_id == 4:
+			out = x
+		else:
+			out = self.ops[op_id](x)
 		return out
-
+	
 
 class Cell(nn.Module):
 	def __init__(self, planes, stride=2):
 		super(Cell, self).__init__()
 		self.planes = planes
 		self.node_list = nn.ModuleList([Node(self.planes)]*10)
-		self.conv_list = nn.ModuleList([nn.Conv2d(self.planes, self.planes, kernel_size=1, stride=1, 
-			padding=0, bias=False)]*7)
+		self.conv_list = nn.ModuleList([nn.Conv2d(self.planes, self.planes, 
+							kernel_size=1, stride=1, padding=0, bias=False)]*7)
 		self.bn = nn.BatchNorm2d(self.planes)
 		self.relu = nn.ReLU(inplace=False)
 
@@ -153,6 +147,15 @@ class Child(nn.Module):
 			[ReduceBranch(planes=self.num_filters),
 			ReduceBranch(planes=2*self.num_filters)]
 		)
+		
+		for m in self.modules():
+			if isinstance(m, nn.Conv2d):
+				nn.init.kaiming_normal_(m.weight, mode='fan_out', 
+					                    nonlinearity='relu')
+			elif isinstance(m, nn.BatchNorm2d):
+				nn.init.constant_(m.weight, 1)
+				nn.init.constant_(m.bias, 0)
+				
 	def forward(self, x, normal_arc, reduction_arc):
 		self.num_filters = 20
 		# make first two input
