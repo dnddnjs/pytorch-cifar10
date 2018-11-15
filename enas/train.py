@@ -152,7 +152,7 @@ def train_controller(child, controller, running_reward, entropy_seq, log_prob_se
 		entropy_bonus = entropy
 
 		loss = - log_prob * (reward - baseline)
-		loss = loss - 0.0001 * entropy_bonus.detach()
+		loss = loss - 0.0001 * entropy_bonus
 
 		controller_optimizer.zero_grad()
 		loss.backward(retain_graph=True)
