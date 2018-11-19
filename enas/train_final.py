@@ -20,6 +20,10 @@ parser.add_argument('--resume', default=None, help='')
 parser.add_argument('--batch_size', default=128, help='')
 parser.add_argument('--num_worker', default=4, help='')
 parser.add_argument('--valid_size', default=0.1, help='')
+parser.add_argument('--dropout', default=0.9, help='dropout rate')
+parser.add_argument('--use_drop_path', default=False, action='store_true', help='drop path for child.')
+parser.add_argument('--use_auxiliary', default=False, action='store_true', help='auxiliary loss for child.')
+
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -124,11 +128,14 @@ for epoch in range(300):
 	for batch_idx, (inputs, targets) in enumerate(train_loader):
 		inputs = inputs.to(device)
 		targets = targets.to(device)
-		outputs = child(inputs, normal_arc, reduction_arc)
+		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
 		loss = criterion(outputs, targets)
+		if args.use_auxiliary:
+			loss += 0.4 * criterion(aux_outs, targets)
 
 		child_optimizer.zero_grad()
 		loss.backward()
+		torch.nn.utils.clip_grad_norm_(child.parameters(), 5.0)
 		child_optimizer.step()
 
 		train_loss += loss.item()
@@ -149,7 +156,7 @@ for epoch in range(300):
 		for batch_idx, (inputs, targets) in enumerate(test_loader):
 			inputs = inputs.to(device)
 			targets = targets.to(device)
-			outputs = child(inputs, normal_arc, reduction_arc)
+			outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
 			loss = criterion(outputs, targets)
 
 			test_loss += loss.item()

@@ -16,10 +16,14 @@ import argparse
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.1, help='')
-parser.add_argument('--resume', default=None, help='')
-parser.add_argument('--batch_size', default=128, help='')
+parser.add_argument('--resume', default=None, help='path of the model weight.')
+parser.add_argument('--batch_size', default=160, help='')
 parser.add_argument('--num_worker', default=4, help='')
 parser.add_argument('--valid_size', default=0.1, help='')
+parser.add_argument('--controller_step', default=300, help='')
+parser.add_argument('--dropout', default=0.9, help='dropout rate')
+parser.add_argument('--use_auxiliary', default=False, action='store_true', help='auxiliary loss for child.')
+
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -84,11 +88,14 @@ def train_child(epoch, controller, child, child_optimizer):
 	for batch_idx, (inputs, targets) in enumerate(train_loader):
 		inputs = inputs.to(device)
 		targets = targets.to(device)
-		outputs = child(inputs, normal_arc, reduction_arc)
+		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
 		loss = criterion(outputs, targets)
+		if args.use_auxiliary:
+			loss += 0.4 * criterion(aux_outs, targets)
 
 		child_optimizer.zero_grad()
 		loss.backward()
+		torch.nn.utils.clip_grad_norm_(child.parameters(), 5.0)
 		child_optimizer.step()
 
 		train_loss += loss.item()
@@ -108,9 +115,14 @@ def train_controller(controller, child, running_reward):
 
 	# todo: in paper controller has to be updated for 2000 times.
 	# but there is no information about mini-batch size. Need to be checked
-	# question: if update controller once then the child is the output of previous controller model
-	# is it right to update controller after gather all reward from validation dataset?
-	for batch_idx, (inputs, targets) in enumerate(valid_loader):
+	valid_iterator = iter(valid_loader)
+	for batch_idx in range(int(args.controller_step)):
+		try:
+			inputs, targets = next(valid_iterator)
+		except StopIteration:
+			valid_iterator = iter(valid_loader)
+			inputs, targets = next(valid_iterator)
+
 		outputs = controller.sample_child()
 		normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
 		correct = 0
@@ -119,7 +131,7 @@ def train_controller(controller, child, running_reward):
 		# 1. get reward using a single mini-batch of validation data
 		inputs = inputs.to(device)
 		targets = targets.to(device)
-		outputs = child(inputs, normal_arc, reduction_arc)
+		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
 	
 		_, predicted = outputs.max(1)
 		total += targets.size(0)
@@ -137,13 +149,12 @@ def train_controller(controller, child, running_reward):
 
 		controller_optimizer.zero_grad()
 		loss.backward(retain_graph=True)
+		
 		controller_optimizer.step()
 		
 		if batch_idx % 10 == 0:
 			print('train controller : [{}/{}]| loss: {:.3f} | reward: {:.3f} | entropy: {:.3f}'.format(batch_idx, 
-				len(valid_loader), loss.item(), reward, entropy.item()))
-		if batch_idx == 30:
-			break
+				args.controller_step, loss.item(), reward, entropy.item()))
 
 	return controller, running_reward
 
@@ -176,7 +187,7 @@ def test_final_model(model):
 
 def main(controller, cosine_annealing_scheduler):
 	running_reward = 0
-	child = Child().to(device)
+	child = Child(dropout_rate=float(args.dropout), use_auxiliary=args.use_auxiliary).to(device)
 	
 	child_optimizer = optim.SGD(child.parameters(), lr=0.05, 
 		                      momentum=0.9, weight_decay=1e-4, nesterov=True)
@@ -185,8 +196,8 @@ def main(controller, cosine_annealing_scheduler):
 	for epoch in range(150):
 		cosine_lr_scheduler.step()
 		child = train_child(epoch, controller, child, child_optimizer)
-		torch.save(child.state_dict(), './save_model/child.pt')
-		torch.save(controller.state_dict(), './save_model/controller.pt')
+		torch.save(child.state_dict(), './save_model/child.pth')
+		torch.save(controller.state_dict(), './save_model/controller.pth')
 
 		if epoch < 150 - 1:
 			controller_model, running_reward = train_controller(controller, child, running_reward)

@@ -72,9 +72,9 @@ class Cell(nn.Module):
 	def __init__(self, planes, stride=2):
 		super(Cell, self).__init__()
 		self.planes = planes
-		self.node_list = nn.ModuleList([Node(self.planes)]*10)
+		self.node_list = nn.ModuleList([Node(self.planes) for _ in range(10)])
 		self.conv_list = nn.ModuleList([nn.Conv2d(self.planes, self.planes, 
-							kernel_size=1, stride=1, padding=0, bias=False)]*7)
+							kernel_size=1, stride=1, padding=0, bias=False) for _ in range(7)])
 		self.bn = nn.BatchNorm2d(self.planes)
 		self.relu = nn.ReLU(inplace=False)
 
@@ -124,29 +124,37 @@ class Cell(nn.Module):
 
 
 class Child(nn.Module):
-	def __init__(self, num_classes=10):
+	def __init__(self, dropout_rate, num_classes=10, use_auxiliary=False):
 		super(Child, self).__init__()
 		self.num_filters = 20
 		self.conv1 = nn.Conv2d(3, self.num_filters, kernel_size=3, stride=1, 
 			                   padding=1, bias=False)
 		self.bn1 = nn.BatchNorm2d(self.num_filters)
-		self.relu = nn.ReLU(inplace=False)
+		self.relu = nn.ReLU(inplace=True)
 		self.avg_pool = nn.AvgPool2d(8, stride=1)
 		self.fc_out = nn.Linear(80, num_classes)
+		self.dropout_rate = dropout_rate
+		self.use_auxiliary = use_auxiliary
 		
-		# if architecture change..?
 		self.cell_list = nn.ModuleList(
-			[Cell(self.num_filters)]*2 + \
+			[Cell(self.num_filters) for _ in range(2)] + \
 			[Cell(2*self.num_filters)] + \
-			[Cell(2*self.num_filters)]*2 + \
+			[Cell(2*self.num_filters) for _ in range(2)] + \
 			[Cell(4*self.num_filters)] + \
-			[Cell(4*self.num_filters)]*2
+			[Cell(4*self.num_filters) for _ in range(2)]
 		)
 
 		self.reduce_module_list = nn.ModuleList(
 			[ReduceBranch(planes=self.num_filters),
 			ReduceBranch(planes=2*self.num_filters)]
 		)
+		
+		if use_auxiliary:
+			self.aux_conv = nn.Sequential(
+				nn.Conv2d(80, 128, kernel_size=1), nn.BatchNorm2d(128), nn.ReLU(inplace=True),
+				nn.Conv2d(128, 768, kernel_size=8), nn.BatchNorm2d(768), nn.ReLU(inplace=True)
+			)
+			self.aux_fc = nn.Linear(768, num_classes)
 
 		for m in self.modules():
 			if isinstance(m, nn.Conv2d):
@@ -197,8 +205,16 @@ class Child(nn.Module):
 			cell_outputs = [cell_outputs[-1], x]
 			cell_id += 1
 		
+		x = self.relu(x)
+		aux = None
+		if self.training and self.use_auxiliary:
+			aux = self.aux_conv(x)
+			aux = aux.view(aux.size(0), -1)
+			aux = self.aux_fc(aux)
+		
 		# output cell
 		x = self.avg_pool(x)
+		x = F.dropout(x, self.dropout_rate, self.training, True)
 		x = x.view(x.size(0), -1)
 		x = self.fc_out(x)
-		return x
+		return x, aux
