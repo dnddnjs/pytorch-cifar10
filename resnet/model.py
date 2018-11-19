@@ -1,8 +1,22 @@
 import torch.nn as nn
+import torch.nn.functional as F
 
+# code from https://github.com/KellerJordan/ResNet-PyTorch-CIFAR10/blob/master/model.py
+class IdentityPadding(nn.Module):
+    def __init__(self, in_channels, out_channels, stride):
+        super(IdentityPadding, self).__init__()
 
+        self.identity = nn.MaxPool2d(1, stride=stride)
+        self.num_zeros = out_channels - in_channels
+    
+    def forward(self, x):
+        out = F.pad(x, (0, 0, 0, 0, 0, self.num_zeros))
+        out = self.identity(out)
+        return out
+	
+	
 class ResidualBlock(nn.Module):
-	def __init__(self, in_channels, out_channels, stride=1, downsample=None):
+	def __init__(self, in_channels, out_channels, stride=1, down_sample=False):
 		super(ResidualBlock, self).__init__()
 		self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, 
 			                   stride=stride, padding=1, bias=False) 
@@ -12,8 +26,13 @@ class ResidualBlock(nn.Module):
 		self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, 
 			                   stride=1, padding=1, bias=False) 
 		self.bn2 = nn.BatchNorm2d(out_channels)
-		self.downsample = downsample
 		self.stride = stride
+		
+		if down_sample:
+			self.down_sample = IdentityPadding(in_channels, out_channels, stride)
+		else:
+			self.down_sample = None
+
 
 	def forward(self, x):
 		residual = x
@@ -25,8 +44,8 @@ class ResidualBlock(nn.Module):
 		out = self.conv2(out)
 		out = self.bn2(out)
 
-		if self.downsample is not None:
-			residual = self.downsample(x)
+		if self.down_sample is not None:
+			residual = self.down_sample(x)
 
 		out += residual
 		out = self.relu(out)
@@ -34,37 +53,20 @@ class ResidualBlock(nn.Module):
 
 
 class ResNet(nn.Module):
-	def __init__(self, layers, num_classes=10):
+	def __init__(self, num_layers, block, num_classes=10):
 		super(ResNet, self).__init__()
-		self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
+		self.num_layers = num_layers
+		self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, 
+							   stride=1, padding=1, bias=False)
 		self.bn1 = nn.BatchNorm2d(16)
 		self.relu = nn.ReLU(inplace=True)
-
+		
 		# feature map size = 32x32x16
-		layers_list = nn.ModuleList(
-			[ResidualBlock(16, 16, stride=1)] * layers[0]
-			)
-		self.layers_2n = nn.Sequential(*layers_list)
-
+		self.layers_2n = self.get_layers(block, 16, 16, stride=1)
 		# feature map size = 16x16x32
-		downsample = nn.Sequential(
-				     	nn.Conv2d(16, 32, kernel_size=1, stride=2, bias=False),
-				     	nn.BatchNorm2d(32))
-		layers_list = nn.ModuleList(
-			[ResidualBlock(16, 32, stride=2, downsample=downsample)] + \
-			[ResidualBlock(32, 32, stride=1)] * (layers[1] - 1)
-			)
-		self.layers_4n = nn.Sequential(*layers_list)
-
+		self.layers_4n = self.get_layers(block, 16, 32, stride=2)
 		# feature map size = 8x8x64
-		downsample = nn.Sequential(
-				     	nn.Conv2d(32, 64, kernel_size=1, stride=2, bias=False),
-				     	nn.BatchNorm2d(64))
-		layers_list = nn.ModuleList(
-			[ResidualBlock(32, 64, stride=2, downsample=downsample)] + \
-			[ResidualBlock(64, 64, stride=1)] * (layers[1] - 1)
-			)
-		self.layers_6n = nn.Sequential(*layers_list)
+		self.layers_6n = self.get_layers(block, 32, 64, stride=2)
 
 		# output layers
 		self.avg_pool = nn.AvgPool2d(8, stride=1)
@@ -77,7 +79,21 @@ class ResNet(nn.Module):
 			elif isinstance(m, nn.BatchNorm2d):
 				nn.init.constant_(m.weight, 1)
 				nn.init.constant_(m.bias, 0)
+	
+	def get_layers(self, block, in_channels, out_channels, stride):
+		if stride == 2:
+			down_sample = True
+		else:
+			down_sample = False
+		
+		layers_list = nn.ModuleList(
+			[block(in_channels, out_channels, stride, down_sample)])
+			
+		for _ in range(self.num_layers - 1):
+			layers_list.append(block(out_channels, out_channels))
 
+		return nn.Sequential(*layers_list)
+		
 	def forward(self, x):
 		x = self.conv1(x)
 		x = self.bn1(x)
@@ -94,5 +110,7 @@ class ResNet(nn.Module):
 
 
 def resnet():
-	model = ResNet([9, 9, 9]) 
+	block = ResidualBlock
+	# total number of layers if 6n + 2. if n is 5 then the depth of network is 32.
+	model = ResNet(5, block) 
 	return model
