@@ -75,23 +75,22 @@ class Node(nn.Module):
 
 
 class Cell(nn.Module):
-	def __init__(self, arc, planes, stride=2):
+	def __init__(self, planes, stride=2):
 		super(Cell, self).__init__()
 		self.planes = planes
-		self.arc = arc
 		self.node_list = nn.ModuleList([Node(self.planes)]*10)
 		self.conv_list = nn.ModuleList([nn.Conv2d(self.planes, self.planes, kernel_size=1, stride=1, 
 			padding=0, bias=False)]*7)
 		self.bn = nn.BatchNorm2d(self.planes)
 		self.relu = nn.ReLU(inplace=False)
 
-	def forward(self, prev_outputs):
+	def forward(self, prev_outputs, arc):
 		# make 5 node = 1 cell
 		layers = prev_outputs
 		node_used = []
 		for i in range(5):
 			prev_outputs = torch.stack(layers)
-			node_arc = self.arc[i*4:(i+1)*4]
+			node_arc = arc[i*4:(i+1)*4]
 			x_id = node_arc[0]
 			x_op = node_arc[2]
 			x = prev_outputs[x_id, :, : ,:].squeeze(0)
@@ -131,7 +130,7 @@ class Cell(nn.Module):
 
 
 class Child(nn.Module):
-	def __init__(self, normal_arc, reduction_arc, num_classes=10):
+	def __init__(self, num_classes=10):
 		super(Child, self).__init__()
 		self.num_filters = 20
 		self.conv1 = nn.Conv2d(3, self.num_filters, kernel_size=3, stride=1, 
@@ -141,22 +140,20 @@ class Child(nn.Module):
 		self.avg_pool = nn.AvgPool2d(8, stride=1)
 		self.fc_out = nn.Linear(80, num_classes)
 		
-		self.normal_arc = normal_arc
-		self.reduction_arc = reduction_arc
 		# if architecture change..?
 		self.cell_list = nn.ModuleList(
-			[Cell(self.normal_arc, self.num_filters)]*2 + \
-			[Cell(self.reduction_arc, 2*self.num_filters)] + \
-			[Cell(self.normal_arc, 2*self.num_filters)]*2 + \
-			[Cell(self.reduction_arc, 4*self.num_filters)] + \
-			[Cell(self.normal_arc, 4*self.num_filters)]*2
+			[Cell(self.num_filters)]*2 + \
+			[Cell(2*self.num_filters)] + \
+			[Cell(2*self.num_filters)]*2 + \
+			[Cell(4*self.num_filters)] + \
+			[Cell(4*self.num_filters)]*2
 		)
 
 		self.reduce_module_list = nn.ModuleList(
 			[ReduceBranch(planes=self.num_filters),
 			ReduceBranch(planes=2*self.num_filters)]
 		)
-	def forward(self, x):
+	def forward(self, x, normal_arc, reduction_arc):
 		self.num_filters = 20
 		# make first two input
 		x = self.relu(self.bn1(self.conv1(x)))
@@ -165,7 +162,7 @@ class Child(nn.Module):
 		# 1-3 cells -----------------------------------------------------
 		cell_id = 0
 		for i in range(2):
-			x = self.cell_list[cell_id](cell_outputs)
+			x = self.cell_list[cell_id](cell_outputs, normal_arc)
 			cell_outputs = [cell_outputs[-1], x]
 			cell_id += 1
 		
@@ -173,13 +170,13 @@ class Child(nn.Module):
 		self.num_filters *= 2
 		# todo: after reducing input, 
 		cell_outputs = [reduce_input(cell_outputs[0]), reduce_input(cell_outputs[1])]
-		x = self.cell_list[cell_id](cell_outputs)
+		x = self.cell_list[cell_id](cell_outputs, reduction_arc)
 		cell_outputs = [cell_outputs[-1], x]
 		cell_id += 1
 
 		# 4-5 cells -----------------------------------------------------
 		for i in range(2):
-			x = self.cell_list[cell_id](cell_outputs)
+			x = self.cell_list[cell_id](cell_outputs, normal_arc)
 			cell_outputs = [cell_outputs[-1], x]
 			cell_id += 1
 		
@@ -187,13 +184,13 @@ class Child(nn.Module):
 		self.num_filters *= 2
 		# todo: after reducing input, 
 		cell_outputs = [reduce_input(cell_outputs[0]), reduce_input(cell_outputs[1])]
-		x = self.cell_list[cell_id](cell_outputs)
+		x = self.cell_list[cell_id](cell_outputs, reduction_arc)
 		cell_outputs = [cell_outputs[-1], x]
 		cell_id += 1
 
 		# 6-7 cells -----------------------------------------------------
 		for i in range(2):
-			x = self.cell_list[cell_id](cell_outputs)
+			x = self.cell_list[cell_id](cell_outputs, normal_arc)
 			cell_outputs = [cell_outputs[-1], x]
 			cell_id += 1
 		
