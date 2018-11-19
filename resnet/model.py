@@ -1,22 +1,17 @@
 import torch.nn as nn
-import torch.utils.model_zoo as model_zoo
-
-__all__ = ['ResNet', 'resnet54']
 
 
-def conv3x3(in_planes, out_planes, stride=1):
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
-
-
-class BasicBlock(nn.Module):
-	def __init__(self, inplanes, planes, stride=1, downsample=None):
-		super(BasicBlock, self).__init__()
-		self.conv1 = conv3x3(inplanes, planes, stride)
-		self.bn1 = nn.BatchNorm2d(planes)
+class ResidualBlock(nn.Module):
+	def __init__(self, in_channels, out_channels, stride=1, downsample=None):
+		super(ResidualBlock, self).__init__()
+		self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, 
+			                   stride=stride, padding=1, bias=False) 
+		self.bn1 = nn.BatchNorm2d(out_channels)
 		self.relu = nn.ReLU(inplace=True)
-		self.conv2 = conv3x3(planes, planes) 
-		self.bn2 = nn.BatchNorm2d(planes)
+
+		self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, 
+			                   stride=1, padding=1, bias=False) 
+		self.bn2 = nn.BatchNorm2d(out_channels)
 		self.downsample = downsample
 		self.stride = stride
 
@@ -39,20 +34,42 @@ class BasicBlock(nn.Module):
 
 
 class ResNet(nn.Module):
-	def __init__(self, block, layers, num_classes=10):
+	def __init__(self, layers, num_classes=10):
 		super(ResNet, self).__init__()
-		self.inplanes = 16
-		self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, 
-			                   padding=1, bias=False)
+		self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
 		self.bn1 = nn.BatchNorm2d(16)
 		self.relu = nn.ReLU(inplace=True)
 
-		self.layer1 = self._make_layer(block, 16, layers[0])
-		self.layer2 = self._make_layer(block, 32, layers[1], stride=2) 
-		self.layer3 = self._make_layer(block, 64, layers[2], stride=2)  
+		# feature map size = 32x32x16
+		layers_list = nn.ModuleList(
+			[ResidualBlock(16, 16, stride=1)] * layers[0]
+			)
+		self.layers_2n = nn.Sequential(*layers_list)
+
+		# feature map size = 16x16x32
+		downsample = nn.Sequential(
+				     	nn.Conv2d(16, 32, kernel_size=1, stride=2, bias=False),
+				     	nn.BatchNorm2d(32))
+		layers_list = nn.ModuleList(
+			[ResidualBlock(16, 32, stride=2, downsample=downsample)] + \
+			[ResidualBlock(32, 32, stride=1)] * (layers[1] - 1)
+			)
+		self.layers_4n = nn.Sequential(*layers_list)
+
+		# feature map size = 8x8x64
+		downsample = nn.Sequential(
+				     	nn.Conv2d(32, 64, kernel_size=1, stride=2, bias=False),
+				     	nn.BatchNorm2d(64))
+		layers_list = nn.ModuleList(
+			[ResidualBlock(32, 64, stride=2, downsample=downsample)] + \
+			[ResidualBlock(64, 64, stride=1)] * (layers[1] - 1)
+			)
+		self.layers_6n = nn.Sequential(*layers_list)
+
+		# output layers
 		self.avg_pool = nn.AvgPool2d(8, stride=1)
 		self.fc_out = nn.Linear(64, num_classes)
-
+		
 		for m in self.modules():
 			if isinstance(m, nn.Conv2d):
 				nn.init.kaiming_normal_(m.weight, mode='fan_out', 
@@ -61,28 +78,14 @@ class ResNet(nn.Module):
 				nn.init.constant_(m.weight, 1)
 				nn.init.constant_(m.bias, 0)
 
-	def _make_layer(self, block, planes, blocks, stride=1):
-		downsample = None
-		if stride != 1 or self.inplanes != planes:
-			downsample = nn.Sequential(
-				nn.Conv2d(self.inplanes, planes, kernel_size=1, 
-					      stride=stride, bias=False),
-				nn.BatchNorm2d(planes))
-		layers = []
-		layers.append(block(self.inplanes, planes, stride, downsample))
-		self.inplanes = planes
-		for i in range(1, blocks):
-			layers.append(block(self.inplanes, planes))
-		return nn.Sequential(*layers)
-
 	def forward(self, x):
 		x = self.conv1(x)
 		x = self.bn1(x)
 		x = self.relu(x)
 
-		x = self.layer1(x)
-		x = self.layer2(x)
-		x = self.layer3(x)
+		x = self.layers_2n(x)
+		x = self.layers_4n(x)
+		x = self.layers_6n(x)
 
 		x = self.avg_pool(x)
 		x = x.view(x.size(0), -1)
@@ -90,6 +93,6 @@ class ResNet(nn.Module):
 		return x
 
 
-def resnet54(**kwargs):
-	model = ResNet(BasicBlock, [9, 9, 9], **kwargs) 
+def resnet():
+	model = ResNet([9, 9, 9]) 
 	return model

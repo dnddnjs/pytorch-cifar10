@@ -8,7 +8,7 @@ import torch.backends.cudnn as cudnn
 import torchvision
 import torchvision.transforms as transforms
 
-from model import resnet54
+from model import resnet
 import argparse
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
@@ -45,7 +45,7 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 
 print('==> Making model..')
 
-net = resnet54()
+net = resnet()
 net = net.to(device)
 if device == 'cuda':
 	net = torch.nn.DataParallel(net)
@@ -133,6 +133,5 @@ if __name__=='__main__':
 		for epoch in range(200):
 			train(epoch)
 			best_acc = test(epoch, best_acc)
-
 	else:
 		test(epoch=0, best_acc=0)
