@@ -10,7 +10,7 @@ width=550px>
 
 - ResNet: [paper](https://arxiv.org/pdf/1512.03385.pdf), [post](https://dnddnjs.github.io/paper/2018/10/09/resnet/), [trained model download(92.5% accuracy)](https://drive.google.com/open?id=1Z9HwREJdmMlItZUfESJSDH2zgX_ITb-l)
   - network architecture
-  ![untitled diagram](https://user-images.githubusercontent.com/16641054/48825846-fe832c00-edab-11e8-936d-0cff644a1cb1.png)
+  ![resnet](https://user-images.githubusercontent.com/16641054/48838934-38b0f580-edcd-11e8-91d3-2c8bedb352d1.jpg)
   - train & test error rate
   ![screenshot 2018-11-19 22 11 28](https://user-images.githubusercontent.com/16641054/48709242-425d2080-ec48-11e8-8a54-64e0b3fbb2a3.png)
 
