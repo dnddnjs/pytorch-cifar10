@@ -3,16 +3,16 @@ import torch.nn.functional as F
 
 # code from https://github.com/KellerJordan/ResNet-PyTorch-CIFAR10/blob/master/model.py
 class IdentityPadding(nn.Module):
-    def __init__(self, in_channels, out_channels, stride):
-        super(IdentityPadding, self).__init__()
-
-        self.identity = nn.MaxPool2d(1, stride=stride)
-        self.num_zeros = out_channels - in_channels
+	def __init__(self, in_channels, out_channels, stride):
+		super(IdentityPadding, self).__init__()
+		
+		self.pooling = nn.MaxPool2d(1, stride=stride)
+		self.add_channels = out_channels - in_channels
     
-    def forward(self, x):
-        out = F.pad(x, (0, 0, 0, 0, 0, self.num_zeros))
-        out = self.identity(out)
-        return out
+	def forward(self, x):
+		out = F.pad(x, (0, 0, 0, 0, 0, self.add_channels))
+		out = self.pooling(out)
+		return out
 	
 	
 class ResidualBlock(nn.Module):
@@ -35,7 +35,7 @@ class ResidualBlock(nn.Module):
 
 
 	def forward(self, x):
-		residual = x
+		shortcut = x
 
 		out = self.conv1(x)
 		out = self.bn1(out)
@@ -45,9 +45,9 @@ class ResidualBlock(nn.Module):
 		out = self.bn2(out)
 
 		if self.down_sample is not None:
-			residual = self.down_sample(x)
+			shortcut = self.down_sample(x)
 
-		out += residual
+		out += shortcut
 		out = self.relu(out)
 		return out
 
