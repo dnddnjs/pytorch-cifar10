@@ -1,3 +1,7 @@
 data/
 __pycache__/
 *.pth
+logs/
+*.txt
+*.pt
+.ipynb_checkpoints
