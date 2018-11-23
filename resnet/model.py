@@ -1,27 +1,41 @@
 import torch.nn as nn
-import torch.utils.model_zoo as model_zoo
+import torch.nn.functional as F
 
-__all__ = ['ResNet', 'resnet54']
-
-
-def conv3x3(in_planes, out_planes, stride=1):
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
-
-
-class BasicBlock(nn.Module):
-	def __init__(self, inplanes, planes, stride=1, downsample=None):
-		super(BasicBlock, self).__init__()
-		self.conv1 = conv3x3(inplanes, planes, stride)
-		self.bn1 = nn.BatchNorm2d(planes)
+# code from https://github.com/KellerJordan/ResNet-PyTorch-CIFAR10/blob/master/model.py
+class IdentityPadding(nn.Module):
+	def __init__(self, in_channels, out_channels, stride):
+		super(IdentityPadding, self).__init__()
+		
+		self.pooling = nn.MaxPool2d(1, stride=stride)
+		self.add_channels = out_channels - in_channels
+    
+	def forward(self, x):
+		out = F.pad(x, (0, 0, 0, 0, 0, self.add_channels))
+		out = self.pooling(out)
+		return out
+	
+	
+class ResidualBlock(nn.Module):
+	def __init__(self, in_channels, out_channels, stride=1, down_sample=False):
+		super(ResidualBlock, self).__init__()
+		self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, 
+			                   stride=stride, padding=1, bias=False) 
+		self.bn1 = nn.BatchNorm2d(out_channels)
 		self.relu = nn.ReLU(inplace=True)
-		self.conv2 = conv3x3(planes, planes) 
-		self.bn2 = nn.BatchNorm2d(planes)
-		self.downsample = downsample
+
+		self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, 
+			                   stride=1, padding=1, bias=False) 
+		self.bn2 = nn.BatchNorm2d(out_channels)
 		self.stride = stride
+		
+		if down_sample:
+			self.down_sample = IdentityPadding(in_channels, out_channels, stride)
+		else:
+			self.down_sample = None
+
 
 	def forward(self, x):
-		residual = x
+		shortcut = x
 
 		out = self.conv1(x)
 		out = self.bn1(out)
@@ -30,29 +44,34 @@ class BasicBlock(nn.Module):
 		out = self.conv2(out)
 		out = self.bn2(out)
 
-		if self.downsample is not None:
-			residual = self.downsample(x)
+		if self.down_sample is not None:
+			shortcut = self.down_sample(x)
 
-		out += residual
+		out += shortcut
 		out = self.relu(out)
 		return out
 
 
 class ResNet(nn.Module):
-	def __init__(self, block, layers, num_classes=10):
+	def __init__(self, num_layers, block, num_classes=10):
 		super(ResNet, self).__init__()
-		self.inplanes = 16
-		self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, 
-			                   padding=1, bias=False)
+		self.num_layers = num_layers
+		self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, 
+							   stride=1, padding=1, bias=False)
 		self.bn1 = nn.BatchNorm2d(16)
 		self.relu = nn.ReLU(inplace=True)
+		
+		# feature map size = 32x32x16
+		self.layers_2n = self.get_layers(block, 16, 16, stride=1)
+		# feature map size = 16x16x32
+		self.layers_4n = self.get_layers(block, 16, 32, stride=2)
+		# feature map size = 8x8x64
+		self.layers_6n = self.get_layers(block, 32, 64, stride=2)
 
-		self.layer1 = self._make_layer(block, 16, layers[0])
-		self.layer2 = self._make_layer(block, 32, layers[1], stride=2) 
-		self.layer3 = self._make_layer(block, 64, layers[2], stride=2)  
+		# output layers
 		self.avg_pool = nn.AvgPool2d(8, stride=1)
 		self.fc_out = nn.Linear(64, num_classes)
-
+		
 		for m in self.modules():
 			if isinstance(m, nn.Conv2d):
 				nn.init.kaiming_normal_(m.weight, mode='fan_out', 
@@ -60,29 +79,29 @@ class ResNet(nn.Module):
 			elif isinstance(m, nn.BatchNorm2d):
 				nn.init.constant_(m.weight, 1)
 				nn.init.constant_(m.bias, 0)
+	
+	def get_layers(self, block, in_channels, out_channels, stride):
+		if stride == 2:
+			down_sample = True
+		else:
+			down_sample = False
+		
+		layers_list = nn.ModuleList(
+			[block(in_channels, out_channels, stride, down_sample)])
+			
+		for _ in range(self.num_layers - 1):
+			layers_list.append(block(out_channels, out_channels))
 
-	def _make_layer(self, block, planes, blocks, stride=1):
-		downsample = None
-		if stride != 1 or self.inplanes != planes:
-			downsample = nn.Sequential(
-				nn.Conv2d(self.inplanes, planes, kernel_size=1, 
-					      stride=stride, bias=False),
-				nn.BatchNorm2d(planes))
-		layers = []
-		layers.append(block(self.inplanes, planes, stride, downsample))
-		self.inplanes = planes
-		for i in range(1, blocks):
-			layers.append(block(self.inplanes, planes))
-		return nn.Sequential(*layers)
-
+		return nn.Sequential(*layers_list)
+		
 	def forward(self, x):
 		x = self.conv1(x)
 		x = self.bn1(x)
 		x = self.relu(x)
 
-		x = self.layer1(x)
-		x = self.layer2(x)
-		x = self.layer3(x)
+		x = self.layers_2n(x)
+		x = self.layers_4n(x)
+		x = self.layers_6n(x)
 
 		x = self.avg_pool(x)
 		x = x.view(x.size(0), -1)
@@ -90,6 +109,8 @@ class ResNet(nn.Module):
 		return x
 
 
-def resnet54(**kwargs):
-	model = ResNet(BasicBlock, [9, 9, 9], **kwargs) 
+def resnet():
+	block = ResidualBlock
+	# total number of layers if 6n + 2. if n is 5 then the depth of network is 32.
+	model = ResNet(5, block) 
 	return model

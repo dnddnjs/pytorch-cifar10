@@ -10,6 +10,8 @@ import torchvision.transforms as transforms
 from model import shake_shake
 from cosine_optim import cosine_annealing_scheduler
 import argparse
+from tensorboardX import SummaryWriter
+
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
 parser.add_argument('--lr', default=0.2, help='')
@@ -17,6 +19,7 @@ parser.add_argument('--resume', default=None, help='')
 parser.add_argument('--batch_size', default=128, help='')
 parser.add_argument('--num_worker', default=4, help='')
 parser.add_argument('--epochs', default=1800, help='')
+parser.add_argument('--logdir', type=str, default='logs', help='')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -48,9 +51,6 @@ print('==> Making model..')
 
 net = shake_shake()
 net = net.to(device)
-if device == 'cuda':
-	net = torch.nn.DataParallel(net)
-	cudnn.benchmark = True
 
 if args.resume is not None:
 	checkpoint = torch.load('./save_model/' + args.resume)
@@ -62,6 +62,8 @@ optimizer = optim.SGD(net.parameters(), lr=args.lr,
 
 
 cosine_lr_scheduler = cosine_annealing_scheduler(optimizer, args.epochs, args.lr)
+writer = SummaryWriter(args.logdir)
+
 
 def train(epoch):
 	net.train()
@@ -83,9 +85,12 @@ def train(epoch):
 		_, predicted = outputs.max(1)
 		total += targets.size(0)
 		correct += predicted.eq(targets).sum().item()
-		if batch_idx % 10 == 0:
-			print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-				  len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
+    
+	acc = 100 * correct / total
+	print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(
+		   epoch, batch_idx, len(train_loader), train_loss/(batch_idx+1), acc))
+
+	writer.add_scalar('log/train error', 100 - acc, epoch)
 
 
 
@@ -108,11 +113,11 @@ def test(epoch, best_acc):
 			total += targets.size(0)
 			correct += predicted.eq(targets).sum().item()
 
-			if batch_idx % 10 == 0:
-				print('epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-				  len(test_loader), test_loss/(batch_idx+1), 100 * correct/total))
-
 	acc = 100 * correct / total
+	print('test epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(
+		   epoch, batch_idx, len(test_loader), test_loss/(batch_idx+1), acc))
+
+	writer.add_scalar('log/test error', 100 - acc, epoch)
 
 	if acc > best_acc:
 		print('==> Saving model..')

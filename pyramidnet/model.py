@@ -1,34 +1,45 @@
 import torch
 import torch.nn as nn
-import math
-#from math import round
-import torch.utils.model_zoo as model_zoo
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+import torch.nn.functional as F
 
 
-def conv3x3(in_planes, out_planes, stride=1):
-    "3x3 convolution with padding"
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
+# code from https://github.com/KellerJordan/ResNet-PyTorch-CIFAR10/blob/master/model.py
+class IdentityPadding(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(IdentityPadding, self).__init__()
+
+        if stride == 2:
+            self.pooling = nn.AvgPool2d(kernel_size=2, stride=2, ceil_mode=True)
+        else:
+            self.pooling = None
+            
+        self.add_channels = out_channels - in_channels
+    
+    def forward(self, x):
+        out = F.pad(x, (0, 0, 0, 0, 0, self.add_channels))
+        if self.pooling is not None:
+            out = self.pooling(out)
+        return out
 
 
-class BasicBlock(nn.Module):
-    outchannel_ratio = 1
-
-    def __init__(self, inplanes, planes, stride=1, downsample=None):
-        super(BasicBlock, self).__init__()
-        self.bn1 = nn.BatchNorm2d(inplanes)
-        self.conv1 = conv3x3(inplanes, planes, stride)        
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv2 = conv3x3(planes, planes)
-        self.bn3 = nn.BatchNorm2d(planes)
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(ResidualBlock, self).__init__()
+        self.bn1 = nn.BatchNorm2d(in_channels)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, 
+                                stride=stride, padding=1, bias=False)      
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, 
+                                stride=1, padding=1, bias=False)    
+        self.bn3 = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
+
+        self.down_sample = IdentityPadding(in_channels, out_channels, stride)
+            
         self.stride = stride
 
     def forward(self, x):
-
+        shortcut = self.down_sample(x)
         out = self.bn1(x)
         out = self.conv1(out)        
         out = self.bn2(out)
@@ -36,131 +47,55 @@ class BasicBlock(nn.Module):
         out = self.conv2(out)
         out = self.bn3(out)
        
-        if self.downsample is not None:
-            shortcut = self.downsample(x)
-            featuremap_size = shortcut.size()[2:4]
-        else:
-            shortcut = x
-            featuremap_size = out.size()[2:4]
-
-        batch_size = out.size()[0]
-        residual_channel = out.size()[1]
-        shortcut_channel = shortcut.size()[1]
-
-        if residual_channel != shortcut_channel:
-            padding = torch.FloatTensor(batch_size, residual_channel - shortcut_channel, 
-            	                        featuremap_size[0], featuremap_size[1]).fill_(0).to(device) 
-            out += torch.cat((shortcut, padding), 1)
-        else:
-            out += shortcut 
-
-        return out
-
-
-class Bottleneck(nn.Module):
-    outchannel_ratio = 4
-
-    def __init__(self, inplanes, planes, stride=1, downsample=None):
-        super(Bottleneck, self).__init__()
-        self.bn1 = nn.BatchNorm2d(inplanes)
-        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, (planes*1), kernel_size=3, stride=stride,
-                               padding=1, bias=False)
-        self.bn3 = nn.BatchNorm2d((planes*1))
-        self.conv3 = nn.Conv2d((planes*1), planes * Bottleneck.outchannel_ratio, kernel_size=1, bias=False)
-        self.bn4 = nn.BatchNorm2d(planes * Bottleneck.outchannel_ratio)
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
-        self.stride = stride
-
-    def forward(self, x):
-
-        out = self.bn1(x)
-        out = self.conv1(out)
-        
-        out = self.bn2(out)
-        out = self.relu(out)
-        out = self.conv2(out)
- 
-        out = self.bn3(out)
-        out = self.relu(out)
-        out = self.conv3(out)
-
-        out = self.bn4(out)
-
-        if self.downsample is not None:
-            shortcut = self.downsample(x)
-            featuremap_size = shortcut.size()[2:4]
-        else:
-            shortcut = x
-            featuremap_size = out.size()[2:4]
-
-        batch_size = out.size()[0]
-        residual_channel = out.size()[1]
-        shortcut_channel = shortcut.size()[1]
-
-        if residual_channel != shortcut_channel:
-            padding = torch.FloatTensor(batch_size, residual_channel - shortcut_channel, 
-            	                        featuremap_size[0], featuremap_size[1]).fill_(0).to(device)
-            out += torch.cat((shortcut, padding), 1)
-        else:
-            out += shortcut 
-
+        out += shortcut
         return out
 
 
 class PyramidNet(nn.Module):
-    def __init__(self, depth, alpha, num_classes, bottleneck=False):
+    def __init__(self, num_layers, alpha, block, num_classes=10):
         super(PyramidNet, self).__init__()   	
-        self.inplanes = 16
-        if bottleneck == True:
-            n = int((depth - 2) / 9)
-            block = Bottleneck
-        else:
-            n = int((depth - 2) / 6)
-            block = BasicBlock
+        self.in_channels = 16
+        
+        # num_layers = (110 - 2)/6 = 18
+        self.num_layers = num_layers
+        self.addrate = alpha / (3*self.num_layers*1.0)
 
-        self.addrate = alpha / (3*n*1.0)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, 
+                               stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(16)
 
-        self.input_featuremap_dim = self.inplanes
-        self.conv1 = nn.Conv2d(3, self.input_featuremap_dim, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(self.input_featuremap_dim)
+        # feature map size = 32x32
+        self.layer1 = self.get_layers(block, stride=1)
+        # feature map size = 16x16
+        self.layer2 = self.get_layers(block, stride=2)
+        # feature map size = 8x8
+        self.layer3 = self.get_layers(block, stride=2)
 
-        self.featuremap_dim = self.input_featuremap_dim 
-        self.layer1 = self.pyramidal_make_layer(block, n)
-        self.layer2 = self.pyramidal_make_layer(block, n, stride=2)
-        self.layer3 = self.pyramidal_make_layer(block, n, stride=2)
-
-        self.final_featuremap_dim = self.input_featuremap_dim
-        self.bn_final= nn.BatchNorm2d(self.final_featuremap_dim)
-        self.relu_final = nn.ReLU(inplace=True)
-        self.avgpool = nn.AvgPool2d(8)
-        self.fc = nn.Linear(self.final_featuremap_dim, num_classes)
+        self.out_channels = int(round(self.out_channels))
+        self.bn_out= nn.BatchNorm2d(self.out_channels)
+        self.relu_out = nn.ReLU(inplace=True)
+        self.avgpool = nn.AvgPool2d(8, stride=1)
+        self.fc_out = nn.Linear(self.out_channels, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', 
+                                        nonlinearity='relu')
             elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
-    def pyramidal_make_layer(self, block, block_depth, stride=1):
-        downsample = None
-        if stride != 1: # or self.inplanes != int(round(featuremap_dim_1st)) * block.outchannel_ratio:
-            downsample = nn.AvgPool2d((2,2), stride = (2, 2), ceil_mode=True)
+    def get_layers(self, block, stride):
+        layers_list = []
+        for _ in range(self.num_layers - 1):
+            self.out_channels = self.in_channels + self.addrate
+            layers_list.append(block(int(round(self.in_channels)), 
+                                     int(round(self.out_channels)), 
+                                     stride))
+            self.in_channels = self.out_channels
+            stride=1
 
-        layers = []
-        self.featuremap_dim = self.featuremap_dim + self.addrate
-        layers.append(block(self.input_featuremap_dim, int(round(self.featuremap_dim)), stride, downsample))
-        for i in range(1, block_depth):
-            temp_featuremap_dim = self.featuremap_dim + self.addrate
-            layers.append(block(int(round(self.featuremap_dim)) * block.outchannel_ratio, int(round(temp_featuremap_dim)), 1))
-            self.featuremap_dim  = temp_featuremap_dim
-        self.input_featuremap_dim = int(round(self.featuremap_dim)) * block.outchannel_ratio
-
-        return nn.Sequential(*layers)
+        return nn.Sequential(*layers_list)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -170,14 +105,15 @@ class PyramidNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
 
-        x = self.bn_final(x)
-        x = self.relu_final(x)
+        x = self.bn_out(x)
+        x = self.relu_out(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        x = self.fc_out(x)
         return x
 
 
-def pyramidnet(**kwargs):
-	model = PyramidNet(depth=110, alpha=84, num_classes=10, bottleneck=False, **kwargs)
+def pyramidnet():
+	block = ResidualBlock
+	model = PyramidNet(num_layers=18, alpha=48, block=block)
 	return model
