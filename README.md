@@ -9,12 +9,15 @@ width=550px>
 ## State of the art models
 
 - ResNet: [paper](https://arxiv.org/pdf/1512.03385.pdf), [post](https://dnddnjs.github.io/paper/2018/10/09/resnet/), [trained model download(92.5% accuracy)](https://drive.google.com/open?id=1Z9HwREJdmMlItZUfESJSDH2zgX_ITb-l)
+  - network architecture
+  ![resnet](https://user-images.githubusercontent.com/16641054/48838934-38b0f580-edcd-11e8-91d3-2c8bedb352d1.jpg)
+  - train & test error rate
+  ![screenshot 2018-11-19 22 11 28](https://user-images.githubusercontent.com/16641054/48709242-425d2080-ec48-11e8-8a54-64e0b3fbb2a3.png)
 
-![screenshot 2018-11-19 22 11 28](https://user-images.githubusercontent.com/16641054/48709242-425d2080-ec48-11e8-8a54-64e0b3fbb2a3.png)
-
-- DenseNet: [paper](https://arxiv.org/pdf/1608.06993.pdf), [post](https://dnddnjs.github.io/paper/2018/10/11/densenet/)
-- Wide-ResNet: [paper](https://arxiv.org/pdf/1605.07146.pdf), [post](https://dnddnjs.github.io/paper/2018/10/12/wide_resnet/)
-- PyramidNet: [paper](https://arxiv.org/pdf/1610.02915.pdf), [post](https://dnddnjs.github.io/paper/2018/10/24/pyramidnet/)
-- Shake-shake: [paper]( https://arxiv.org/abs/1705.07485), [post](https://dnddnjs.github.io/paper/2018/10/13/shake_shake/)
-- Shake-drop: [paper](https://arxiv.org/pdf/1802.02375.pdf), [post](https://dnddnjs.github.io/paper/2018/10/19/shake_drop/)
-- Auto-augment: [paper](https://arxiv.org/pdf/1805.09501.pdf), [post]
+- PyramidNet: [paper](https://arxiv.org/pdf/1610.02915.pdf), [post](https://dnddnjs.github.io/paper/2018/10/24/pyramidnet/), [trained model download(95.19% accuracy)](https://drive.google.com/open?id=1-CGVOcIjPx8zsGM7QtzUNbUqyMt08o3W)
+  - network architecture
+  ![pyramidnet](https://user-images.githubusercontent.com/16641054/48932228-17bbe200-ef3e-11e8-8c71-6d006aaf6486.png)
+  - train & test error rate
+  ![screenshot 2018-11-23 00 12 55](https://user-images.githubusercontent.com/16641054/48932267-4b970780-ef3e-11e8-9496-9678dbb05391.png)
+- Shake-Drop: [paper]( https://arxiv.org/abs/1705.07485), [post](https://dnddnjs.github.io/paper/2018/10/25/shake_drop/)
+- ENAS: [paper](), [post]()
