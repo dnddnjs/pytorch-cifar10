@@ -19,5 +19,8 @@ width=550px>
   ![pyramidnet](https://user-images.githubusercontent.com/16641054/48932228-17bbe200-ef3e-11e8-8c71-6d006aaf6486.png)
   - train & test error rate
   ![screenshot 2018-11-23 00 12 55](https://user-images.githubusercontent.com/16641054/48932267-4b970780-ef3e-11e8-9496-9678dbb05391.png)
-- Shake-Drop: [paper]( https://arxiv.org/abs/1705.07485), [post](https://dnddnjs.github.io/paper/2018/10/25/shake_drop/)
+- Shake-Shake: [paper]( https://arxiv.org/abs/1705.07485), [post](https://dnddnjs.github.io/paper/2018/10/25/shake_shake/), [trained model download(96.29%)](https://drive.google.com/open?id=1stB5ZFPGLGXx4iYSY_NNAPDqh7u9kIZV)
+  - train & test error rate
+  ![screenshot 2018-11-27 14 42 56](https://user-images.githubusercontent.com/16641054/49060950-ef402a80-f252-11e8-86c5-5c465afd7027.png)
+
 - ENAS: [paper](), [post]()
