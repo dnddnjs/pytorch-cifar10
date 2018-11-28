@@ -15,14 +15,13 @@ from cosine_optim import cosine_annealing_scheduler
 import argparse
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
-parser.add_argument('--lr', default=0.1, help='')
-parser.add_argument('--resume', default=None, help='')
-parser.add_argument('--batch_size', default=128, help='')
-parser.add_argument('--num_worker', default=4, help='')
+parser.add_argument('--batch_size', default=144, help='')
+parser.add_argument('--num_worker', default=16, help='')
 parser.add_argument('--valid_size', default=0.1, help='')
-parser.add_argument('--dropout', default=0.9, help='dropout rate')
-parser.add_argument('--use_drop_path', default=False, action='store_true', help='drop path for child.')
+parser.add_argument('--epochs', default=630, help='')
+parser.add_argument('--dropout', default=0.8, help='dropout rate')
 parser.add_argument('--use_auxiliary', default=False, action='store_true', help='auxiliary loss for child.')
+parser.add_argument('--use_drop_path', default=False, action='store_true', help='drop path for child.')
 
 args = parser.parse_args()
 
@@ -44,8 +43,6 @@ transforms_test = transforms.Compose([
 	transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-print('-'*40)
-print('1. get 10 architecture and compute the reward of each architecture. Take the architecture with highest reward')
 dataset_train = torchvision.datasets.CIFAR10(root='../data', train=True, download=True, transform=transforms_train)
 dataset_valid = torchvision.datasets.CIFAR10(root='../data', train=True, download=True, transform=transforms_valid)
 dataset_test = torchvision.datasets.CIFAR10(root='../data', train=False, download=True, transform=transforms_test)
@@ -60,9 +57,14 @@ valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=args.batch_
 										  num_workers=args.num_worker, sampler=valid_sampler, pin_memory=True)
 
 controller = Controller().to(device)
-child = Child().to(device)
-controller.load_state_dict(torch.load('./save_model/controller.pt'))
-child.load_state_dict(torch.load('./save_model/child.pt'))
+child = Child(dropout_rate=float(args.dropout), use_auxiliary=args.use_auxiliary).to(device)
+controller.load_state_dict(torch.load('./save_model/controller.pth'))
+child.load_state_dict(torch.load('./save_model/child.pth'))
+
+print('-'*40)
+print('1. get 10 architecture and compute the reward of each architecture. Take the architecture with highest reward')
+controller.eval()
+child.eval()
 
 best_reward = 0
 for i in range(10):
@@ -79,7 +81,7 @@ for i in range(10):
 		# 1. get reward using a single mini-batch of validation data
 		inputs = inputs.to(device)
 		targets = targets.to(device)
-		outputs = child(inputs, normal_arc, reduction_arc)
+		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
 	
 		_, predicted = outputs.max(1)
 		total += targets.size(0)
@@ -93,7 +95,9 @@ for i in range(10):
 		break
 
 print('best reward is ', best_reward)
-print('best architecture is ', best_reward_arc)
+print('best architecture is ')# , best_reward_arc)
+print('\t normal arc    :', [na.item() for na in best_reward_arc[0]])
+print('\t reduction arc :', [na.item() for na in best_reward_arc[1]])
 
 print('-'*40)
 print('2. train child model from scratch with best reward architecture')
@@ -112,13 +116,13 @@ criterion = nn.CrossEntropyLoss()
 normal_arc = best_reward_arc[0]
 reduction_arc = best_reward_arc[1]
 
-child = Child().to(device)
+child = Child(dropout_rate=float(args.dropout), use_auxiliary=args.use_auxiliary).to(device)
 child_optimizer = optim.SGD(child.parameters(), lr=0.05, 
-		                      momentum=0.9, weight_decay=1e-4, nesterov=True)
-cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr=0.05)
+		                      momentum=0.9, weight_decay=2e-4, nesterov=True)
+cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr_max=0.05, lr_min=0.0001)
 
 best_acc = 0
-for epoch in range(300):
+for epoch in range(args.epochs):
 	child.train()
 	cosine_lr_scheduler.step()
 	
@@ -170,4 +174,5 @@ for epoch in range(300):
 	if acc >= best_acc:
 		print('best accuracy is ', best_acc)
 		best_acc = acc
-		torch.save(child.state_dict(), './save_model/best_child.pt')
+		torch.save(child.state_dict(), './save_model/best_child.pth')
+

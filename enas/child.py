@@ -17,7 +17,7 @@ class ReduceBranch(nn.Module):
 	def forward(self, x):
 		out1 = self.conv1(self.avg_pool(x))
 		shift_x = x[:, :, 1:, 1:]
-		shift_x= F.pad(shift_x, (0, 1, 0, 1))
+		shift_x = F.pad(shift_x, (0, 1, 0, 1))
 		out2 = self.conv2(self.avg_pool(shift_x))
 		out = torch.cat([out1, out2], dim=1)
 		return out
@@ -39,11 +39,11 @@ def enas_conv(planes, kernel, stride=1):
 	conv = seperable_conv3x3 if kernel == 3 else seperable_conv5x5
 
 	stack_conv = nn.Sequential(
-		nn.ReLU(inplace=False), 
+		nn.ReLU(inplace=True), 
 		nn.BatchNorm2d(planes), 
 		conv,
 		
-		nn.ReLU(inplace=False), 
+		nn.ReLU(inplace=True), 
 		nn.BatchNorm2d(planes), 
 		conv
 	)
@@ -76,7 +76,7 @@ class Cell(nn.Module):
 		self.conv_list = nn.ModuleList([nn.Conv2d(self.planes, self.planes, 
 							kernel_size=1, stride=1, padding=0, bias=False) for _ in range(7)])
 		self.bn = nn.BatchNorm2d(self.planes)
-		self.relu = nn.ReLU(inplace=False)
+		self.relu = nn.ReLU(inplace=True)
 
 	def forward(self, prev_outputs, arc):
 		# make 5 node = 1 cell

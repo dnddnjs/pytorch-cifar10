@@ -15,12 +15,13 @@ from cosine_optim import cosine_annealing_scheduler
 import argparse
 
 parser = argparse.ArgumentParser(description='cifar10 classification models')
-parser.add_argument('--lr', default=0.1, help='')
 parser.add_argument('--resume', default=None, help='path of the model weight.')
 parser.add_argument('--batch_size', default=160, help='')
 parser.add_argument('--num_worker', default=4, help='')
 parser.add_argument('--valid_size', default=0.1, help='')
-parser.add_argument('--controller_step', default=300, help='')
+parser.add_argument('--epochs', default=150, help='')
+parser.add_argument('--controller_step', default=30, help='')
+parser.add_argument('--controller_aggregate', default=10, help='')
 parser.add_argument('--dropout', default=0.9, help='dropout rate')
 parser.add_argument('--use_auxiliary', default=False, action='store_true', help='auxiliary loss for child.')
 
@@ -66,7 +67,7 @@ test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=100,
 
 # there are 10 classes so the dataset name is cifar-10
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 
-	       'dog', 'frog', 'horse', 'ship', 'truck')
+		   'dog', 'frog', 'horse', 'ship', 'truck')
 
 print('==> Making model..')
 controller = Controller().to(device)
@@ -78,8 +79,6 @@ def train_child(epoch, controller, child, child_optimizer):
 	child.train()
 
 	controller.init_hidden(batch_size=1)
-	outputs = controller.sample_child()
-	normal_arc, reduction_arc, _, _ = outputs
 	
 	train_loss = 0
 	correct = 0
@@ -88,7 +87,10 @@ def train_child(epoch, controller, child, child_optimizer):
 	for batch_idx, (inputs, targets) in enumerate(train_loader):
 		inputs = inputs.to(device)
 		targets = targets.to(device)
-		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
+        
+        normal_arc, reduction_arc, _, _ = controller.sample_child()  # sample architecture 
+		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)  # forward with sampled arch
+        
 		loss = criterion(outputs, targets)
 		if args.use_auxiliary:
 			loss += 0.4 * criterion(aux_outs, targets)
@@ -122,33 +124,36 @@ def train_controller(controller, child, running_reward):
 		except StopIteration:
 			valid_iterator = iter(valid_loader)
 			inputs, targets = next(valid_iterator)
-
-		outputs = controller.sample_child()
-		normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
-		correct = 0
-		total = 0
-
-		# 1. get reward using a single mini-batch of validation data
-		inputs = inputs.to(device)
-		targets = targets.to(device)
-		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
-	
-		_, predicted = outputs.max(1)
-		total += targets.size(0)
-		correct += predicted.eq(targets).sum().item()
-		reward = correct / total
-
-		# 2. using the reward, train controller with REINFORCE
-		running_reward = 0.99 * running_reward + 0.01 * reward
-		baseline = running_reward
-		log_prob = torch.cat(log_prob_seq, dim=0).sum()
-		entropy = torch.cat(entropy_seq, dim=0).sum()
-
-		loss = - log_prob * (reward - baseline)
-		loss = loss - 0.0001 * entropy.detach()
-
+		
 		controller_optimizer.zero_grad()
-		loss.backward(retain_graph=True)
+		
+		# accumulate gradients
+		for _ in range(args.controller_aggregate):
+			outputs = controller.sample_child()
+			normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
+			correct = 0
+			total = 0
+
+			# 1. get reward using a single mini-batch of validation data
+			inputs = inputs.to(device)
+			targets = targets.to(device)
+			outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
+
+			_, predicted = outputs.max(1)
+			total += targets.size(0)
+			correct += predicted.eq(targets).sum().item()
+			reward = correct / total
+
+			# 2. using the reward, train controller with REINFORCE
+			running_reward = 0.99 * running_reward + 0.01 * reward
+			baseline = running_reward
+			log_prob = torch.cat(log_prob_seq, dim=0).sum()
+			entropy = torch.cat(entropy_seq, dim=0).sum()
+
+			loss = - log_prob * (reward - baseline)
+			loss = loss - 0.0001 * entropy.detach()
+			
+			loss.backward()
 		
 		controller_optimizer.step()
 		
@@ -159,7 +164,7 @@ def train_controller(controller, child, running_reward):
 	return controller, running_reward
 
 
-def test_final_model(model):
+def test_child(model):
 	model.eval()
 
 	test_loss = 0
@@ -191,20 +196,18 @@ def main(controller, cosine_annealing_scheduler):
 	
 	child_optimizer = optim.SGD(child.parameters(), lr=0.05, 
 		                      momentum=0.9, weight_decay=1e-4, nesterov=True)
-	cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr=0.05)
+	cosine_lr_scheduler = cosine_annealing_scheduler(child_optimizer, lr_max=0.05, lr_min=0.0005)
 			
 	for epoch in range(150):
 		cosine_lr_scheduler.step()
 		child = train_child(epoch, controller, child, child_optimizer)
+		controller_model, running_reward = train_controller(controller, child, running_reward)
+		
 		torch.save(child.state_dict(), './save_model/child.pth')
 		torch.save(controller.state_dict(), './save_model/controller.pth')
 
-		if epoch < 150 - 1:
-			controller_model, running_reward = train_controller(controller, child, running_reward)
-
-	final_model = model
-	final_acc = test_final_model(final_model)
-	print('training is done. Final accuarcy is ', final_acc)
+	child_acc = test_child(child)
+	print('training is done. Child accuarcy is ', child_acc)
 
 
 if __name__=="__main__":

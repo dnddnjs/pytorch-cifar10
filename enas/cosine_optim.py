@@ -15,13 +15,13 @@ def _cosine_annealing(step, lr_max, lr_min):
     return new_lr
 
 
-def cosine_annealing_scheduler(optimizer, lr):
+def cosine_annealing_scheduler(optimizer, lr_max, lr_min):
     scheduler = lr_scheduler.LambdaLR(
         optimizer,
         lr_lambda=lambda step: _cosine_annealing(
             step=step,
-            lr_max=lr,  # since lr_lambda computes multiplicative factor
-            lr_min=0.001))
+            lr_max=lr_max,  # since lr_lambda computes multiplicative factor
+            lr_min=lr_min))
 
     return scheduler
 
