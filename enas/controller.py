@@ -50,6 +50,9 @@ class Controller(nn.Module):
 	def sample_cell(self, arc_seq, entropy_list, log_prob_list, use_additional_bias):
 		inputs = torch.zeros(1).long().to(device)
 		inputs = self.embed_first(inputs)
+		
+		#print('='*80)
+		
 
 		# lstm should have a dynamic size of output for indices of previous layer.
 		# so save previous lstm outputs and fc outputs as a list
@@ -62,9 +65,11 @@ class Controller(nn.Module):
 			prev_fc_outputs.append(self.fc_index_prev(self.hx.clone()))
 
 		for node_id in range(2, self.num_nodes):
-
+			#print('-'*80)
+			
 			# sample 2 indices to select input of the node
 			for i in range(2):
+				# print(inputs)
 				hidden = (self.hx, self.cx)
 				self.hx, self.cx = self.lstm(inputs, hidden)
 				# todo: need to be fixed
@@ -79,8 +84,10 @@ class Controller(nn.Module):
 				log_prob = F.log_softmax(logits, dim=-1)
 				action = torch.multinomial(probs, 1)[0]
 				arc_seq.append(action)
+				#print(action)
 
 				selected_log_prob = log_prob[:, action.long()]
+
 				entropy = -(log_prob * probs).sum(1, keepdim=False)
 				entropy_list.append(entropy)
 				log_prob_list.append(selected_log_prob)
@@ -89,6 +96,8 @@ class Controller(nn.Module):
 
 			# sample 2 operations for computation
 			for i in range(2):
+				
+				#print(inputs)
 				hidden = (self.hx, self.cx)
 				self.hx, self.cx = self.lstm(inputs, hidden)
 				logits = self.fc_ops(self.hx)
@@ -100,8 +109,10 @@ class Controller(nn.Module):
 				log_prob = F.log_softmax(logits, dim=-1)
 				action = torch.multinomial(probs, 1)[0]
 				arc_seq.append(action)
+				#print(action)
 
 				selected_log_prob = log_prob[:, action.long()]
+
 				entropy = -(log_prob * probs).sum(1, keepdim=False)
 				entropy_list.append(entropy)
 				log_prob_list.append(selected_log_prob)
@@ -113,8 +124,8 @@ class Controller(nn.Module):
 			prev_lstm_outputs.append(self.hx.clone())
 			prev_fc_outputs.append(self.fc_index_prev(self.hx.clone()))
 
-			inputs = torch.zeros(1).long().to(device)
-			inputs = self.embed_first(inputs)
+			# inputs = torch.zeros(1).long().to(device)
+			# inputs = self.embed_first(inputs)
 
 		return arc_seq, entropy_list, log_prob_list
 

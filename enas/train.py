@@ -59,11 +59,11 @@ train_sampler = SubsetRandomSampler(train_idx)
 valid_sampler = SubsetRandomSampler(valid_idx)
 
 train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, 
-	                      num_workers=args.num_worker, sampler=train_sampler)
+	                      num_workers=int(args.num_worker), sampler=train_sampler, pin_memory=True)
 valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=args.batch_size, 
-	                      num_workers=args.num_worker, sampler=valid_sampler)
+	                      num_workers=int(args.num_worker), sampler=valid_sampler, pin_memory=True)
 test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=100, 
-	                     shuffle=False, num_workers=args.num_worker)
+	                     shuffle=False, num_workers=int(args.num_worker), pin_memory=True)
 
 # there are 10 classes so the dataset name is cifar-10
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 
@@ -77,8 +77,7 @@ controller_optimizer = optim.Adam(controller.parameters(), lr=0.0035)
 
 def train_child(epoch, controller, child, child_optimizer):
 	child.train()
-
-	controller.init_hidden(batch_size=1)
+	controller.eval()
 	
 	train_loss = 0
 	correct = 0
@@ -88,7 +87,8 @@ def train_child(epoch, controller, child, child_optimizer):
 		inputs = inputs.to(device)
 		targets = targets.to(device)
         
-        normal_arc, reduction_arc, _, _ = controller.sample_child()  # sample architecture 
+		controller.init_hidden(batch_size=1)
+		normal_arc, reduction_arc, _, _ = controller.sample_child()  # sample architecture 
 		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)  # forward with sampled arch
         
 		loss = criterion(outputs, targets)
@@ -129,6 +129,7 @@ def train_controller(controller, child, running_reward):
 		
 		# accumulate gradients
 		for _ in range(args.controller_aggregate):
+			controller.init_hidden(batch_size=1)
 			outputs = controller.sample_child()
 			normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
 			correct = 0
@@ -153,7 +154,7 @@ def train_controller(controller, child, running_reward):
 			loss = - log_prob * (reward - baseline)
 			loss = loss - 0.0001 * entropy.detach()
 			
-			loss.backward()
+			loss.backward(retain_graph=True)
 		
 		controller_optimizer.step()
 		

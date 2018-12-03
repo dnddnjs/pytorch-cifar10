@@ -22,6 +22,8 @@ parser.add_argument('--epochs', default=630, help='')
 parser.add_argument('--dropout', default=0.8, help='dropout rate')
 parser.add_argument('--use_auxiliary', default=False, action='store_true', help='auxiliary loss for child.')
 parser.add_argument('--use_drop_path', default=False, action='store_true', help='drop path for child.')
+parser.add_argument('--use_default_controller', default=False, action='store_true')
+
 
 args = parser.parse_args()
 
@@ -58,8 +60,9 @@ valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=args.batch_
 
 controller = Controller().to(device)
 child = Child(dropout_rate=float(args.dropout), use_auxiliary=args.use_auxiliary).to(device)
-controller.load_state_dict(torch.load('./save_model/controller.pth'))
-child.load_state_dict(torch.load('./save_model/child.pth'))
+if not args.use_default_controller:
+	controller.load_state_dict(torch.load('./save_model/controller.pth'))
+	child.load_state_dict(torch.load('./save_model/child.pth'))
 
 print('-'*40)
 print('1. get 10 architecture and compute the reward of each architecture. Take the architecture with highest reward')
