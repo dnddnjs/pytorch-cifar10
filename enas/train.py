@@ -75,94 +75,111 @@ criterion = nn.CrossEntropyLoss()
 controller_optimizer = optim.Adam(controller.parameters(), lr=0.0035)
 
 
+def get_grad_norm(model):
+    total_norm = 0
+    for p in model.parameters():
+        if p.grad is None:
+            continue
+        param_norm = p.grad.data.norm(2)
+        total_norm += param_norm.item() ** 2
+    grad_norm = total_norm ** (1. / 2)
+    return grad_norm
+
+    
 def train_child(epoch, controller, child, child_optimizer):
-	child.train()
-	controller.eval()
-	
-	train_loss = 0
-	correct = 0
-	total = 0
+    child.train()
+    controller.eval()
 
-	for batch_idx, (inputs, targets) in enumerate(train_loader):
-		inputs = inputs.to(device)
-		targets = targets.to(device)
-        
-		controller.init_hidden(batch_size=1)
-		normal_arc, reduction_arc, _, _ = controller.sample_child()  # sample architecture 
-		outputs, aux_outs = child(inputs, normal_arc, reduction_arc)  # forward with sampled arch
-        
-		loss = criterion(outputs, targets)
-		if args.use_auxiliary:
-			loss += 0.4 * criterion(aux_outs, targets)
+    train_loss = 0
+    correct = 0
+    total = 0
 
-		child_optimizer.zero_grad()
-		loss.backward()
-		torch.nn.utils.clip_grad_norm_(child.parameters(), 5.0)
-		child_optimizer.step()
+    for batch_idx, (inputs, targets) in enumerate(train_loader):
+        inputs = inputs.to(device)
+        targets = targets.to(device)
 
-		train_loss += loss.item()
-		_, predicted = outputs.max(1)
-		total += targets.size(0)
-		correct += predicted.eq(targets).sum().item()
-		if batch_idx % 10 == 0:
-			print('train child epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f}'.format(epoch, batch_idx, 
-			 	len(train_loader), train_loss/(batch_idx+1), 100.*correct/total))
+        controller.init_hidden(batch_size=1)
+        normal_arc, reduction_arc, _, _ = controller.sample_child()  # sample architecture 
+        outputs, aux_outs = child(inputs, normal_arc, reduction_arc)  # forward with sampled arch
 
-	return child
+        loss = criterion(outputs, targets)
+        if args.use_auxiliary:
+            loss += 0.4 * criterion(aux_outs, targets)
+
+        child_optimizer.zero_grad()
+        loss.backward()
+        grad_norm = get_grad_norm(child)
+        torch.nn.utils.clip_grad_norm_(child.parameters(), 5.0)
+        child_optimizer.step()
+
+        train_loss += loss.item()
+        _, predicted = outputs.max(1)
+        total += targets.size(0)
+        correct += predicted.eq(targets).sum().item()
+
+        if batch_idx % 10 == 0:
+            print('train child epoch : {} [{}/{}]| loss: {:.3f} | acc: {:.3f} | grad norm: {:.3f}'.format(epoch, batch_idx, 
+                len(train_loader), train_loss/(batch_idx+1), 100.*correct/total, grad_norm))
+
+    return child
 
 
 def train_controller(controller, child, running_reward):
-	child.eval()
-	controller.train()
+    child.eval()
+    controller.train()
 
-	# todo: in paper controller has to be updated for 2000 times.
-	# but there is no information about mini-batch size. Need to be checked
-	valid_iterator = iter(valid_loader)
-	for batch_idx in range(int(args.controller_step)):
-		try:
-			inputs, targets = next(valid_iterator)
-		except StopIteration:
-			valid_iterator = iter(valid_loader)
-			inputs, targets = next(valid_iterator)
-		
-		controller_optimizer.zero_grad()
-		
-		# accumulate gradients
-		for _ in range(args.controller_aggregate):
-			controller.init_hidden(batch_size=1)
-			outputs = controller.sample_child()
-			normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
-			correct = 0
-			total = 0
+    # todo: in paper controller has to be updated for 2000 times.
+    # but there is no information about mini-batch size. Need to be checked
+    valid_iterator = iter(valid_loader)
+    for batch_idx in range(int(args.controller_step)):
+        try:
+            inputs, targets = next(valid_iterator)
+        except StopIteration:
+            valid_iterator = iter(valid_loader)
+            inputs, targets = next(valid_iterator)
 
-			# 1. get reward using a single mini-batch of validation data
-			inputs = inputs.to(device)
-			targets = targets.to(device)
-			outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
+        controller_optimizer.zero_grad()
 
-			_, predicted = outputs.max(1)
-			total += targets.size(0)
-			correct += predicted.eq(targets).sum().item()
-			reward = correct / total
+        # accumulate gradients
+        reward_list = list()
+        for _ in range(args.controller_aggregate):
+            controller.init_hidden(batch_size=1)
+            outputs = controller.sample_child()
+            normal_arc, reduction_arc, entropy_seq, log_prob_seq = outputs
+            correct = 0
+            total = 0
 
-			# 2. using the reward, train controller with REINFORCE
-			running_reward = 0.99 * running_reward + 0.01 * reward
-			baseline = running_reward
-			log_prob = torch.cat(log_prob_seq, dim=0).sum()
-			entropy = torch.cat(entropy_seq, dim=0).sum()
+            # 1. get reward using a single mini-batch of validation data
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+            outputs, aux_outs = child(inputs, normal_arc, reduction_arc)
 
-			loss = - log_prob * (reward - baseline)
-			loss = loss - 0.0001 * entropy.detach()
-			
-			loss.backward(retain_graph=True)
-		
-		controller_optimizer.step()
-		
-		if batch_idx % 10 == 0:
-			print('train controller : [{}/{}]| loss: {:.3f} | reward: {:.3f} | entropy: {:.3f}'.format(batch_idx, 
-				args.controller_step, loss.item(), reward, entropy.item()))
+            _, predicted = outputs.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+            reward = correct / total
+            reward_list.append(reward)
 
-	return controller, running_reward
+            # 2. using the reward, train controller with REINFORCE
+            baseline = 0.99 * running_reward + 0.01 * reward
+            log_prob = torch.cat(log_prob_seq, dim=0).sum()
+            entropy = torch.cat(entropy_seq, dim=0).sum()
+
+            loss = - log_prob * (reward - baseline)
+            loss = loss - 0.0001 * entropy.detach()
+            loss = loss / args.controller_aggregate
+
+            loss.backward(retain_graph=True)
+        
+        grad_norm = get_grad_norm(controller)
+        controller_optimizer.step()
+        running_reward = 0.99 * running_reward + 0.01 * np.mean(reward_list)
+
+        if batch_idx % 10 == 0:
+            print('train controller : [{}/{}]| loss: {:.3f} | running reward: {:.3f} | entropy: {:.3f} |  grad norm: {:.3f}'.format(batch_idx, 
+                args.controller_step, loss.item(), running_reward, entropy.item(), grad_norm))
+
+    return controller, running_reward
 
 
 def test_child(model):
@@ -202,7 +219,7 @@ def main(controller, cosine_annealing_scheduler):
 	for epoch in range(150):
 		cosine_lr_scheduler.step()
 		child = train_child(epoch, controller, child, child_optimizer)
-		controller_model, running_reward = train_controller(controller, child, running_reward)
+		controller, running_reward = train_controller(controller, child, running_reward)
 		
 		torch.save(child.state_dict(), './save_model/child.pth')
 		torch.save(controller.state_dict(), './save_model/controller.pth')
