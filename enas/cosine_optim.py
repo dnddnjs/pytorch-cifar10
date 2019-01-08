@@ -12,6 +12,7 @@ def _cosine_annealing(step, lr_max, lr_min):
 
     new_lr = lr_min + (lr_max - lr_min) * 0.5 * (
              1 + np.cos(step / update_cycle_len * np.pi))
+    print('child learning rate is updated to ', new_lr)
     return new_lr
 
 
